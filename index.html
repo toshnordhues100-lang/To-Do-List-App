@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Cadence. A voice-first to-do list with calendar, checklist and insights.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Cadence">
+  <title>Cadence</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 0 0-7 0v6A3.5 3.5 0 0 0 12 15z"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5M8.5 21.5h7"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 7h2M4 12h2M4 17h2M10 7h10M10 12h10M10 17h10"/></symbol>
+      <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16M7 16v-5M12 16V6M17 16v-8"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+      <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+      <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-4"/></symbol>
+      <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+      <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></symbol>
+    </defs>
+  </svg>
+
+  <div id="app" class="app">
+    <header class="topbar">
+      <div class="topbar-text">
+        <h1 id="viewTitle">Tasks</h1>
+        <p id="viewSubtitle" class="subtitle"></p>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" id="undoBtn" aria-label="Undo" title="Undo" hidden><svg><use href="#i-undo"/></svg></button>
+        <button class="icon-btn" id="searchBtn" aria-label="Search" title="Search"><svg><use href="#i-search"/></svg></button>
+        <button class="icon-btn" id="typeBtn" aria-label="Type a task" title="Type a task"><svg><use href="#i-keyboard"/></svg></button>
+      </div>
+    </header>
+
+    <div id="searchBar" class="searchbar" hidden>
+      <input id="searchInput" type="search" placeholder="Search tasks, tags or notes" autocomplete="off" aria-label="Search tasks">
+      <button id="searchClear" class="btn-text" type="button">Done</button>
+    </div>
+
+    <main id="view" class="view" aria-live="polite"></main>
+
+    <nav class="tabbar" aria-label="Main">
+      <button class="tab" data-view="list"><svg><use href="#i-list"/></svg><span>List</span></button>
+      <button class="tab" data-view="calendar"><svg><use href="#i-calendar"/></svg><span>Calendar</span></button>
+      <div class="mic-slot">
+        <button id="micBtn" class="mic" aria-label="Speak a task" aria-pressed="false">
+          <svg class="mic-icon"><use href="#i-mic"/></svg>
+          <svg class="stop-icon"><use href="#i-stop"/></svg>
+        </button>
+      </div>
+      <button class="tab" data-view="insights"><svg><use href="#i-chart"/></svg><span>Insights</span></button>
+      <button class="tab" data-view="settings"><svg><use href="#i-settings"/></svg><span>Settings</span></button>
+    </nav>
+  </div>
+
+  <div id="backdrop" class="backdrop" hidden></div>
+
+  <section id="captureSheet" class="sheet capture" hidden aria-label="Add a task">
+    <div class="sheet-handle"></div>
+    <div class="capture-head">
+      <div class="capture-status">
+        <span id="captureDot" class="dot"></span>
+        <span id="captureStatus">Ready</span>
+      </div>
+      <span id="captureContext" class="capture-context"></span>
+    </div>
+    <p id="transcript" class="transcript">Tap the microphone and say a task.</p>
+    <div id="captureResult" class="capture-result" hidden></div>
+    <form id="typeForm" class="type-form" autocomplete="off">
+      <input id="typeInput" type="text" placeholder="Type a task or a command" aria-label="Type a task" enterkeyhint="done">
+      <button type="submit" class="btn primary">Add</button>
+    </form>
+    <div class="capture-actions">
+      <button id="captureMic" class="btn secondary" type="button">Start listening</button>
+      <button id="captureClose" class="btn text" type="button">Close</button>
+    </div>
+    <details class="hints">
+      <summary>What can I say</summary>
+      <ul>
+        <li>"Call the dentist tomorrow at 3"</li>
+        <li>"Pay rent on the first of every month"</li>
+        <li>"Team meeting every Monday at 10, tag work"</li>
+        <li>"Urgent, send the invoice by Friday"</li>
+        <li>"Buy milk and then book a haircut on Saturday"</li>
+        <li>"Complete buy milk", "Delete the dentist task"</li>
+        <li>"Move gym to Friday", "Make dentist high priority"</li>
+        <li>"What's on today", "What do I have tomorrow"</li>
+        <li>"Show calendar", "Show list", "Undo"</li>
+      </ul>
+    </details>
+  </section>
+
+  <section id="taskSheet" class="sheet task-sheet" hidden aria-label="Edit task">
+    <div class="sheet-handle"></div>
+    <form id="taskForm" autocomplete="off">
+      <div class="sheet-title-row">
+        <h2 id="taskSheetTitle">Edit task</h2>
+        <button type="button" class="icon-btn" id="taskClose" aria-label="Close"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <label class="field">
+        <span>Title</span>
+        <input id="tTitle" type="text" required maxlength="200">
+      </label>
+      <div class="field-row">
+        <label class="field"><span>Date</span><input id="tDate" type="date"></label>
+        <label class="field"><span>Time</span><input id="tTime" type="time"></label>
+      </div>
+      <div class="quick-dates">
+        <button type="button" class="chip" data-quick="today">Today</button>
+        <button type="button" class="chip" data-quick="tomorrow">Tomorrow</button>
+        <button type="button" class="chip" data-quick="nextweek">Next week</button>
+        <button type="button" class="chip" data-quick="none">No date</button>
+      </div>
+      <div class="field">
+        <span>Priority</span>
+        <div class="segmented" role="radiogroup" id="tPriority">
+          <label><input type="radio" name="priority" value="low"><span>Low</span></label>
+          <label><input type="radio" name="priority" value="normal" checked><span>Normal</span></label>
+          <label><input type="radio" name="priority" value="high"><span>High</span></label>
+        </div>
+      </div>
+      <div class="field-row">
+        <label class="field">
+          <span>Repeat</span>
+          <select id="tRepeat">
+            <option value="">Never</option>
+            <option value="daily">Daily</option>
+            <option value="weekdays">Weekdays</option>
+            <option value="every2days">Every other day</option>
+            <option value="weekly">Weekly</option>
+            <option value="biweekly">Every two weeks</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </label>
+        <label class="field"><span>Duration (min)</span><input id="tDuration" type="number" min="0" step="5" inputmode="numeric"></label>
+      </div>
+      <label class="field"><span>Tags</span><input id="tTags" type="text" placeholder="work, home"></label>
+      <label class="field"><span>Notes</span><textarea id="tNotes" rows="3"></textarea></label>
+      <div class="sheet-actions">
+        <button type="button" id="taskDelete" class="btn danger-text">Delete</button>
+        <div class="spacer"></div>
+        <button type="button" id="taskComplete" class="btn secondary">Complete</button>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </form>
+  </section>
+
+  <div id="toast" class="toast" hidden role="status">
+    <span id="toastText"></span>
+    <button id="toastAction" class="btn text" type="button" hidden>Undo</button>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
