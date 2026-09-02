@@ -1,0 +1,12 @@
+{
+  "name": "cadence-voice-tasks",
+  "version": "1.0.0",
+  "description": "Voice-first to-do app with calendar, checklist and insights. Installable PWA.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "start": "python3 -m http.server 8080"
+  },
+  "license": "MIT"
+}
