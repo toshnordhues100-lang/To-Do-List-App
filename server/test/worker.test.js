@@ -188,3 +188,65 @@ test('a reminder far in the future is left to the scheduler', async () => {
     assert.equal(calls.length, 0);
   } finally { globalThis.fetch = realFetch; }
 });
+
+// Cloudflare's free plan allows roughly 1,000 writes and 1,000 list calls a day.
+// These tests pin the storage cost of the paths that run all day long.
+function countingKV() {
+  const kv = fakeKV();
+  kv.ops = { get: 0, put: 0, list: 0, delete: 0 };
+  for (const op of ['get', 'put', 'list', 'delete']) {
+    const real = kv[op].bind(kv);
+    kv[op] = async (...a) => { kv.ops[op] += 1; return real(...a); };
+  }
+  return kv;
+}
+
+test('an idle scheduler minute costs one read: no listing, no writes', async () => {
+  const env = { KV: countingKV() };
+  const now = new Date();
+  await deviceWithReminder(env, new Date(now.getTime() + 3600000).toISOString());
+  await deliverDue(env, now, { wait: async () => {} }); // first run builds the index
+  env.KV.ops = { get: 0, put: 0, list: 0, delete: 0 };
+  for (let m = 1; m <= 30; m += 1) {
+    await deliverDue(env, new Date(now.getTime() + m * 60000), { wait: async () => {} });
+  }
+  assert.deepEqual(env.KV.ops, { get: 30, put: 0, list: 0, delete: 0 });
+});
+
+test('a phone missing from the index is picked up by the hourly rebuild', async () => {
+  const env = { KV: fakeKV() };
+  const realFetch = globalThis.fetch;
+  try {
+    const calls = pushRecorder();
+    const now = new Date();
+    await deviceWithReminder(env, new Date(now.getTime() + 62 * 60000).toISOString());
+    await env.KV.put('idx', JSON.stringify({ rebuilt: now.toISOString(), devices: {} })); // simulate a lost update
+    assert.equal(await deliverDue(env, new Date(now.getTime() + 20 * 60000), { wait: async () => {} }), 0, 'index still fresh, phone unknown');
+    assert.equal(await deliverDue(env, new Date(now.getTime() + 61 * 60000), { wait: async () => {} }), 1, 'rebuilt after an hour and caught up');
+    assert.equal(calls.length, 1);
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test('the daily Claude budget is persisted every 25th command, not every command', async () => {
+  const env = { KV: countingKV(), ANTHROPIC_API_KEY: 'k', PARSE_DAILY_LIMIT: '400' };
+  const realFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({ content: [{ type: 'text', text: '{"actions":[],"say":"ok"}' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const other = 'zyxwvutsrqponmlkjihgfedcba543210';
+    for (let i = 0; i < 50; i += 1) {
+      const res = await worker.fetch(new Request('https://api/api/parse', { method: 'POST', body: JSON.stringify({ text: 'buy milk', token: other }) }), env);
+      assert.equal(res.status, 200);
+    }
+    assert.equal(env.KV.ops.put, 2);
+    assert.equal(env.KV.m.get(`rl:${other}:${new Date().toISOString().slice(0, 10)}`), '50');
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test('subscription and reminders arrive in one request and cost one device write', async () => {
+  const env = { KV: countingKV() };
+  const res = await worker.fetch(new Request(`https://api/api/devices/${token}/reminders`, { method: 'PUT', body: JSON.stringify({ subscription: realSubscription(), tz: 'America/Chicago', reminders: [{ id: 'a', title: 'Dentist', body: '', at: new Date(Date.now() + 7200000).toISOString() }] }) }), env, { waitUntil: () => {} });
+  assert.deepEqual(await res.json(), { ok: true, reminders: 1, subscribed: true });
+  assert.equal(env.KV.ops.put, 2, 'the device and the index');
+  const again = await worker.fetch(new Request(`https://api/api/devices/${token}/reminders`, { method: 'PUT', body: JSON.stringify({ reminders: [{ id: 'a', title: 'Dentist', body: '', at: new Date(Date.now() + 7200000).toISOString() }] }) }), env, { waitUntil: () => {} });
+  assert.equal((await again.json()).subscribed, true, 'the stored subscription is kept when only reminders are sent');
+});

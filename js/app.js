@@ -660,7 +660,7 @@ async function enableReminders({ silent = false } = {}) {
     if (!res.ok) throw new Error('register failed');
     state.push = 'on';
     updateSettings({ pushEnabled: true, remindPrompted: true });
-    await syncReminders();
+    await syncReminders({ subscription: sub.toJSON(), force: true });
     if (!silent) toast('Reminders are on. Sending a test notification now.', { duration: 6000 });
     testReminder({ quiet: true });
     return true;
@@ -690,7 +690,10 @@ function scheduleReminderSync() {
   state.syncTimer = setTimeout(() => { syncReminders(); }, 400);
 }
 
-async function syncReminders() {
+// Sends this phone's reminder schedule to the server. The server's storage has a
+// small daily write allowance, so an unchanged schedule is not sent again: the last
+// schedule sent is remembered and compared first.
+async function syncReminders({ subscription = null, force = false } = {}) {
   if (!API || !state.settings.pushEnabled) return;
   const horizon = now().getTime() - 30 * 60000;
   const reminders = openTasks().map((t) => {
@@ -699,13 +702,28 @@ async function syncReminders() {
     const when = t.time ? formatTime(t.time, state.settings.hour12) : formatDate(t.due, now());
     return { id: t.id, title: t.title, body: t.time ? `${formatDate(t.due, now())} · ${when}` : `Due ${when.toLowerCase()}`, at: at.toISOString() };
   }).filter(Boolean);
+  const signature = JSON.stringify(reminders);
+  let last = null;
+  let lastEndpoint = null;
+  try { last = localStorage.getItem('cadence.synced'); lastEndpoint = localStorage.getItem('cadence.endpoint'); } catch { last = null; }
+  const endpointChanged = Boolean(subscription) && subscription.endpoint !== lastEndpoint;
+  if (!force && !endpointChanged && last === signature) return;
   try {
+    const payload = { reminders };
+    if (subscription) { payload.subscription = subscription; payload.tz = timeZoneName(); }
     const res = await fetch(`${API}/api/devices/${deviceToken()}/reminders`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reminders }),
+      body: JSON.stringify(payload),
     });
-    if (res.ok) { const d = await res.json(); if (d && d.subscribed === false) state.push = 'off'; }
+    if (res.ok) {
+      const d = await res.json();
+      if (d && d.subscribed === false) state.push = 'off';
+      try {
+        localStorage.setItem('cadence.synced', signature);
+        if (subscription) localStorage.setItem('cadence.endpoint', subscription.endpoint);
+      } catch { /* ignore */ }
+    }
   } catch { /* offline: next change retries */ }
 }
 
@@ -745,8 +763,17 @@ async function restorePushState() {
     if (sub && Notification.permission === 'granted') {
       state.push = 'on';
       if (!state.settings.pushEnabled) updateSettings({ pushEnabled: true });
-      // Re-register in case the server forgot us; cheap.
-      fetch(`${API}/api/devices/${deviceToken()}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON(), tz: timeZoneName() }) }).then(() => syncReminders()).catch(() => {});
+      // One request carries the subscription and the schedule, and only goes out
+      // when something changed since the last sync. A status read then confirms
+      // the server still knows this phone; if not, the full sync is forced.
+      const subscription = sub.toJSON();
+      syncReminders({ subscription }).then(async () => {
+        try {
+          const res = await fetch(`${API}/api/devices/${deviceToken()}`, { cache: 'no-store' });
+          const st = res.ok ? await res.json() : null;
+          if (!st || !st.subscribed) await syncReminders({ subscription, force: true });
+        } catch { /* offline */ }
+      }).catch(() => {});
     } else {
       state.push = Notification.permission === 'denied' ? 'denied' : 'off';
       if (state.settings.pushEnabled) updateSettings({ pushEnabled: false });
