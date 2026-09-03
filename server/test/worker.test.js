@@ -69,3 +69,89 @@ test('status and test endpoints report the push pipeline', async () => {
   assert.equal(st.subscribed, true);
   assert.equal(st.pushService, 'web.push.apple.com');
 });
+
+import { deliverDue } from '../src/index.js';
+import { createECDH, randomBytes } from 'node:crypto';
+import { b64u } from '../src/push.js';
+
+// A real P-256 subscription, so the push payload is genuinely encrypted in these tests.
+function realSubscription() {
+  const receiver = createECDH('prime256v1');
+  receiver.generateKeys();
+  return { endpoint: 'https://web.push.apple.com/QW', keys: { p256dh: b64u(receiver.getPublicKey()), auth: b64u(randomBytes(16)) } };
+}
+
+// Records what the push service was asked to send, and when, without leaving the machine.
+function pushRecorder() {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), at: Date.now(), ttl: init.headers.TTL, urgency: init.headers.Urgency });
+    return new Response('', { status: 201 });
+  };
+  return calls;
+}
+
+async function deviceWithReminder(env, at) {
+  await worker.fetch(new Request(`https://api/api/devices/${token}`, { method: 'PUT', body: JSON.stringify({ subscription: realSubscription() }) }), env);
+  await worker.fetch(new Request(`https://api/api/devices/${token}/reminders`, { method: 'PUT', body: JSON.stringify({ reminders: [{ id: 't1', title: 'Take out the trash', body: '11:10 PM', at }] }) }), env);
+}
+
+test('a reminder coming up is claimed now and pushed at its exact second', async () => {
+  const env = { KV: fakeKV() };
+  const realFetch = globalThis.fetch;
+  try {
+    const calls = pushRecorder();
+    const now = new Date();
+    // Due 40 seconds from now: the old code would have waited for the next minute tick.
+    await deviceWithReminder(env, new Date(now.getTime() + 40000).toISOString());
+    const waits = [];
+    const sent = await deliverDue(env, now, { wait: async (ms) => { waits.push(ms); } });
+    assert.equal(sent, 1, 'pushed within this run rather than a later tick');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].urgency, 'high');
+    // It waited for the remaining time instead of firing early.
+    assert.ok(waits.length === 1 && waits[0] > 30000 && waits[0] <= 40000, `waited ${waits[0]}ms`);
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test('the next run does not send the same reminder again', async () => {
+  const env = { KV: fakeKV() };
+  const realFetch = globalThis.fetch;
+  try {
+    const calls = pushRecorder();
+    const now = new Date();
+    await deviceWithReminder(env, new Date(now.getTime() + 20000).toISOString());
+    await deliverDue(env, now, { wait: async () => {} });
+    await deliverDue(env, new Date(now.getTime() + 60000), { wait: async () => {} });
+    assert.equal(calls.length, 1, 'claimed on the first run, skipped on the second');
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test('a reminder missed while the server was down still goes out, but stale ones do not', async () => {
+  const env = { KV: fakeKV() };
+  const realFetch = globalThis.fetch;
+  try {
+    const calls = pushRecorder();
+    const now = new Date();
+    await deviceWithReminder(env, new Date(now.getTime() - 5 * 60000).toISOString());
+    assert.equal(await deliverDue(env, now, { wait: async () => {} }), 1, 'five minutes late is still worth sending');
+    const env2 = { KV: fakeKV() };
+    await deviceWithReminder(env2, new Date(now.getTime() - 45 * 60000).toISOString());
+    assert.equal(await deliverDue(env2, now, { wait: async () => {} }), 0, 'forty-five minutes late is not');
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test('the delivery outcome is recorded for the status readout', async () => {
+  const env = { KV: fakeKV() };
+  const realFetch = globalThis.fetch;
+  try {
+    pushRecorder();
+    const now = new Date();
+    await deviceWithReminder(env, new Date(now.getTime() + 1000).toISOString());
+    await deliverDue(env, now, { wait: async () => {} });
+    const st = await (await worker.fetch(new Request(`https://api/api/devices/${token}`), env)).json();
+    assert.equal(st.lastDelivery.title, 'Take out the trash');
+    assert.equal(st.lastDelivery.status, 201);
+    assert.equal(st.lastDelivery.ok, true);
+  } finally { globalThis.fetch = realFetch; }
+});
