@@ -2,7 +2,7 @@ import {
   WEEKDAYS, WEEKDAYS_SHORT, MONTHS, toISODate, fromISODate, addDays,
   formatTime, formatDate, formatLongDate, formatDuration, toTimeString,
 } from './dates.js';
-import { parseInput, parseTask, findBestMatch } from './parser.js';
+import { parseInput, parseTask, findBestMatch, relativeOffset } from './parser.js';
 import {
   loadTasks, saveTasks, loadSettings, saveSettings, createTask, nextOccurrence,
   REPEAT_LABELS, exportData, importData, DEFAULT_SETTINGS,
@@ -101,6 +101,46 @@ function spokenTask(task, { withDate = true } = {}) {
   return parts.join(', ');
 }
 
+function formatCountdown(ms) {
+  if (ms <= 0) return ms > -60000 ? 'now' : '';
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `in ${s} s`;
+  if (s < 3600) return `in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  if (s < 86400) { const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); return m ? `in ${h} h ${m} min` : `in ${h} h`; }
+  return '';
+}
+
+function countdownSpan(at, cls = 'countdown') {
+  const ms = at.getTime() - Date.now();
+  if (ms > 86400000 || ms <= -60000) return '';
+  return `<span class="${cls}" data-count-at="${at.getTime()}">${esc(formatCountdown(ms))}</span>`;
+}
+
+// Runs every second. Every value is recomputed from the real clock, so a phone
+// that suspended the app for an hour shows the true remaining time on resume.
+let crossedTimer = null;
+function tickCountdowns() {
+  const nowMs = Date.now();
+  let crossed = false;
+  document.querySelectorAll('[data-count-at]').forEach((node) => {
+    const at = Number(node.dataset.countAt);
+    const text = formatCountdown(at - nowMs);
+    if (node.textContent !== text) node.textContent = text;
+    if (at <= nowMs && !node.dataset.done) { node.dataset.done = '1'; crossed = true; }
+  });
+  if (crossed && !crossedTimer) crossedTimer = setTimeout(() => { crossedTimer = null; render(); }, 1500);
+}
+
+function nextReminder() {
+  let best = null;
+  for (const t of openTasks()) {
+    const at = reminderMoment(t);
+    if (!at || at.getTime() < Date.now() - 60000) continue;
+    if (!best || at < best.at) best = { task: t, at };
+  }
+  return best;
+}
+
 function timeZoneName() {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
 }
@@ -116,8 +156,14 @@ function deviceToken() {
 }
 
 function reminderMoment(task) {
-  // When this task should ring: its own time, or the daily reminder time for date-only tasks.
-  if (!task.due || task.completedAt || task.remind === false) return null;
+  // When this task should ring: an exact moment for "in 10 minutes" style tasks,
+  // its own time, or the daily reminder time for date-only tasks.
+  if (task.completedAt || task.remind === false) return null;
+  if (task.remindAt) {
+    const at = new Date(task.remindAt);
+    if (!Number.isNaN(at.getTime())) return new Date(at.getTime() - (task.time ? state.settings.reminderLead : 0) * 60000);
+  }
+  if (!task.due) return null;
   const time = task.time || state.settings.dailyReminderTime || '09:00';
   const [h, m] = time.split(':').map(Number);
   const at = fromISODate(task.due);
@@ -192,7 +238,7 @@ function completeTask(task) {
     t.completedAt = new Date().toISOString();
     if (t.repeat) {
       const due = nextOccurrence(t, now());
-      if (due) state.tasks.push(createTask({ ...t, due, completedAt: null, notifiedAt: null }));
+      if (due) state.tasks.push(createTask({ ...t, due, completedAt: null, notifiedAt: null, remindAt: null }));
     }
   });
 }
@@ -208,7 +254,9 @@ function deleteTask(task) {
 function patchTask(task, patch) {
   commit(() => {
     const t = state.tasks.find((x) => x.id === task.id);
-    if (t) Object.assign(t, patch, { notifiedAt: patch.due || patch.time ? null : t.notifiedAt });
+    if (!t) return;
+    const timing = ('due' in patch && patch.due !== t.due) || ('time' in patch && patch.time !== t.time);
+    Object.assign(t, patch, { notifiedAt: timing ? null : t.notifiedAt, remindAt: timing ? null : t.remindAt });
   });
 }
 
@@ -252,8 +300,8 @@ function showResult(html) {
 
 function resultCard(label, task) {
   const at = reminderMoment(task);
-  const note = at && state.settings.pushEnabled ? ' · Reminder set' : '';
-  return `<div class="result-card"><span class="result-label">${esc(label)}</span><div><div class="result-title">${esc(task.title)}</div><div class="result-meta">${esc(describeTask(task)) || 'No date'}${esc(note)}</div></div></div>`;
+  const note = at && state.settings.pushEnabled ? ' · Reminder ' + (countdownSpan(at, 'countdown inline') || 'set') : '';
+  return `<div class="result-card"><span class="result-label">${esc(label)}</span><div><div class="result-title">${esc(task.title)}</div><div class="result-meta">${esc(describeTask(task)) || 'No date'}${note}</div></div></div>`;
 }
 
 let confirmResolve = null;
@@ -327,6 +375,7 @@ async function handleInput(raw) {
 
   let cmds = null;
   let sayText = '';
+  const relative = relativeOffset(text, now());
   if (API && state.settings.smartParsing && state.server !== 'off') {
     setThinking(true);
     const smart = await smartParse(text);
@@ -335,6 +384,18 @@ async function handleInput(raw) {
     else if (smart) { cmds = [{ type: 'none', reason: smart.say || 'Nothing to do' }]; sayText = smart.say; }
   }
   if (!cmds) cmds = [local];
+
+  // "In 90 seconds" style requests keep their exact moment instead of a rounded clock time.
+  if (relative) {
+    for (const cmd of cmds) {
+      if (cmd.type !== 'add') continue;
+      for (const t of cmd.tasks) {
+        t.remindAt = relative.at.toISOString();
+        t.due = toISODate(relative.at);
+        t.time = toTimeString(relative.at.getHours(), relative.at.getMinutes());
+      }
+    }
+  }
 
   const replies = [];
   for (const cmd of cmds) {
@@ -380,6 +441,11 @@ async function applyCommand(cmd) {
       const created = addTasks(cmd.tasks, 'voice');
       showResult(created.map((t) => resultCard('Added', t)).join(''));
       toast(created.length === 1 ? `Added "${created[0].title}"` : `Added ${created.length} tasks`, { action: 'Undo', onAction: undo });
+      if (created.length === 1 && created[0].remindAt) {
+        const secs = Math.round((new Date(created[0].remindAt) - Date.now()) / 1000);
+        const spokenIn = secs < 90 ? `${secs} seconds` : secs < 5400 ? `${Math.round(secs / 60)} minutes` : `${(secs / 3600).toFixed(1).replace(/\.0$/, '')} hours`;
+        return `Added ${created[0].title}. I will remind you in ${spokenIn}`;
+      }
       return created.length === 1 ? `Added ${spokenTask(created[0])}` : `Added ${created.length} tasks`;
     }
 
@@ -621,7 +687,7 @@ async function disableReminders() {
 function scheduleReminderSync() {
   if (!API || !state.settings.pushEnabled) return;
   clearTimeout(state.syncTimer);
-  state.syncTimer = setTimeout(() => { syncReminders(); }, 1200);
+  state.syncTimer = setTimeout(() => { syncReminders(); }, 400);
 }
 
 async function syncReminders() {
@@ -930,13 +996,15 @@ function render() {
   el('undoBtn').hidden = !state.undo.length;
   const open = openTasks();
   const dueToday = open.filter((t) => t.due && t.due <= todayISO()).length;
+  const nxt = state.view === 'list' ? nextReminder() : null;
+  const nextHtml = nxt && nxt.at.getTime() - Date.now() < 86400000 ? ` · ${esc(nxt.task.title)} ${countdownSpan(nxt.at, 'countdown inline')}` : '';
   const subtitle = {
-    list: open.length ? `${open.length} open · ${dueToday} due today` : 'Nothing open. Tap the microphone to add a task.',
-    calendar: formatLongDate(state.selectedDate),
+    list: (open.length ? `${open.length} open · ${dueToday} due today` : 'Nothing open. Tap the microphone to add a task.') + nextHtml,
+    calendar: esc(formatLongDate(state.selectedDate)),
     insights: 'Your last 30 days',
     settings: `Cadence ${APP_VERSION}`,
   }[state.view];
-  el('viewSubtitle').textContent = subtitle;
+  el('viewSubtitle').innerHTML = subtitle;
   const v = el('view');
   if (state.view === 'list') v.innerHTML = renderList();
   else if (state.view === 'calendar') v.innerHTML = renderCalendar();
@@ -951,6 +1019,7 @@ function taskRow(task, { showDate = true } = {}) {
   if (showDate && task.due) meta.push(`<span class="${overdue ? 'overdue' : ''}">${esc(formatDate(task.due, now()))}</span>`);
   if (task.time) meta.push(`<span class="${overdue ? 'overdue' : ''}">${esc(formatTime(task.time, state.settings.hour12))}</span>`);
   if (task.durationMin) meta.push(`<span>${esc(formatDuration(task.durationMin))}</span>`);
+  if (!task.completedAt) { const at = reminderMoment(task); const cd = at ? countdownSpan(at) : ''; if (cd) meta.push(cd); }
   if (task.repeat) meta.push(`<span class="with-icon"><svg><use href="#i-repeat"/></svg>${esc(REPEAT_LABELS[task.repeat])}</span>`);
   if (task.due && !task.completedAt && task.remind === false) meta.push('<span class="with-icon off" title="No reminder"><svg><use href="#i-bell-off"/></svg>No reminder</span>');
   task.tags.forEach((t) => meta.push(`<span class="tag">${esc(t)}</span>`));
@@ -1449,6 +1518,7 @@ function init() {
   renderMicState('Ready');
   checkRemindersLocally();
   setInterval(checkRemindersLocally, 30000);
+  setInterval(tickCountdowns, 1000);
   setInterval(() => { if (state.view !== 'settings') render(); }, 5 * 60000);
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

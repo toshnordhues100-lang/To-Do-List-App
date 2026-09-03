@@ -340,3 +340,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 .facts.diag { margin-top: 10px; font-size: 13.5px; }
 .facts.diag strong { text-align: right; max-width: 60%; font-weight: 500; }
+
+.countdown { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+.countdown:empty { display: none; }
+.subtitle .countdown.inline { font-weight: 600; }

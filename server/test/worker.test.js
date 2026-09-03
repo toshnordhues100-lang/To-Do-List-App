@@ -155,3 +155,36 @@ test('the delivery outcome is recorded for the status readout', async () => {
     assert.equal(st.lastDelivery.ok, true);
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('a reminder due in the next two minutes is pushed by the sync request itself, not the scheduler', async () => {
+  const env = { KV: fakeKV() };
+  const realFetch = globalThis.fetch;
+  try {
+    const calls = pushRecorder();
+    await worker.fetch(new Request(`https://api/api/devices/${token}`, { method: 'PUT', body: JSON.stringify({ subscription: realSubscription() }) }), env);
+    const background = [];
+    const ctx = { waitUntil: (p) => background.push(p) };
+    const at = new Date(Date.now() + 300).toISOString();
+    const res = await worker.fetch(new Request(`https://api/api/devices/${token}/reminders`, { method: 'PUT', body: JSON.stringify({ reminders: [{ id: 'soon', title: 'Clean', body: 'now', at }] }) }), env, ctx);
+    assert.equal(res.status, 200);
+    assert.equal(background.length, 1, 'delivery was scheduled in the background of the request');
+    await Promise.all(background);
+    assert.equal(calls.length, 1, 'pushed without waiting for a cron tick');
+    assert.ok(calls[0].at >= Date.parse(at) - 5, 'not before its moment');
+    const st = await (await worker.fetch(new Request(`https://api/api/devices/${token}`), env)).json();
+    assert.equal(st.lastDelivery.title, 'Clean');
+  } finally { globalThis.fetch = realFetch; }
+});
+
+test('a reminder far in the future is left to the scheduler', async () => {
+  const env = { KV: fakeKV() };
+  const realFetch = globalThis.fetch;
+  try {
+    const calls = pushRecorder();
+    await worker.fetch(new Request(`https://api/api/devices/${token}`, { method: 'PUT', body: JSON.stringify({ subscription: realSubscription() }) }), env);
+    const background = [];
+    await worker.fetch(new Request(`https://api/api/devices/${token}/reminders`, { method: 'PUT', body: JSON.stringify({ reminders: [{ id: 'later', title: 'Dentist', body: '', at: new Date(Date.now() + 3600000).toISOString() }] }) }), env, { waitUntil: (p) => background.push(p) });
+    await Promise.all(background);
+    assert.equal(calls.length, 0);
+  } finally { globalThis.fetch = realFetch; }
+});

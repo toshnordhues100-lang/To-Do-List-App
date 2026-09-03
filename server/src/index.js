@@ -91,7 +91,7 @@ function deviceStatus(dev) {
   };
 }
 
-async function handleDevice(request, env, token, sub) {
+async function handleDevice(request, env, token, sub, ctx) {
   if (!TOKEN_RE.test(token)) return json(env, { error: 'bad token' }, 400);
   const key = deviceKey(token);
   if (request.method === 'DELETE') {
@@ -134,6 +134,11 @@ async function handleDevice(request, env, token, sub) {
   }
   existing.updatedAt = new Date().toISOString();
   await env.KV.put(key, JSON.stringify(existing), { expirationTtl: 400 * 86400 });
+  // Anything due in the next two minutes is handled right now by this request, so a
+  // "remind me in 30 seconds" never waits for the scheduler.
+  if (sub === 'reminders' && existing.subscription && ctx && typeof ctx.waitUntil === 'function') {
+    ctx.waitUntil(deliverDue(env, new Date(), { lookAheadMs: 120000, onlyKey: key }).catch(() => {}));
+  }
   return json(env, { ok: true, reminders: (existing.reminders || []).length, subscribed: Boolean(existing.subscription) });
 }
 
@@ -147,7 +152,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // Claiming (writing the sent marker before the wait) is what keeps the next
 // minute's run from sending the same reminder twice; the notification tag on the
 // phone collapses any duplicate that a stale read still lets through.
-async function deliverDue(env, now = new Date(), { lookAheadMs = 90000, wait = sleep } = {}) {
+async function deliverDue(env, now = new Date(), { lookAheadMs = 90000, wait = sleep, onlyKey = null } = {}) {
   const keys = await vapid(env);
   const subject = env.VAPID_SUBJECT || 'mailto:owner@example.com';
   const start = now.getTime();
@@ -159,7 +164,7 @@ async function deliverDue(env, now = new Date(), { lookAheadMs = 90000, wait = s
   const touched = new Map();
   let cursor;
   do {
-    const page = await env.KV.list({ prefix: 'dev:', cursor });
+    const page = onlyKey ? { keys: [{ name: onlyKey }], list_complete: true } : await env.KV.list({ prefix: 'dev:', cursor });
     cursor = page.list_complete ? undefined : page.cursor;
     for (const { name } of page.keys) {
       const dev = await env.KV.get(name, 'json');
@@ -205,7 +210,7 @@ async function deliverDue(env, now = new Date(), { lookAheadMs = 90000, wait = s
 export { deliverDue };
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(env) });
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, '');
@@ -219,7 +224,7 @@ export default {
       }
       if (path === '/api/parse' && request.method === 'POST') return handleParse(request, env);
       const m = path.match(/^\/api\/devices\/([^/]+)(?:\/(reminders|test))?$/);
-      if (m && ['GET', 'PUT', 'POST', 'DELETE'].includes(request.method)) return handleDevice(request, env, m[1], m[2]);
+      if (m && ['GET', 'PUT', 'POST', 'DELETE'].includes(request.method)) return handleDevice(request, env, m[1], m[2], ctx);
       if (path === '/api/deliver' && request.method === 'POST' && url.searchParams.get('key') && url.searchParams.get('key') === env.ADMIN_KEY) {
         return json(env, { sent: await deliverDue(env) });
       }
