@@ -25,7 +25,7 @@ You need three secrets in the GitHub repository. Go to **Settings, Secrets and v
 | `CLOUDFLARE_ACCOUNT_ID` | https://dash.cloudflare.com (free account). The account ID is on the right side of the Workers & Pages overview page. |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare dashboard, My Profile, API Tokens, Create Token, use the **Edit Cloudflare Workers** template. |
 
-Then push to `main` (or open the Actions tab and run "Test and deploy"). The workflow:
+Then push to `main` (or open the Actions tab and run "Test and deploy"). Any merge to `main` also re-runs it, which is the easiest way to redeploy after adding or changing secrets. The workflow:
 
 1. runs the tests,
 2. deploys the server to Cloudflare and stores your Anthropic key there as a secret,
