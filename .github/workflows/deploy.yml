@@ -7,13 +7,15 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  test-and-deploy:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,8 +24,32 @@ jobs:
           node-version: 22
       - run: npm test
 
-      # Publish the static site to the gh-pages branch. GitHub serves that
-      # branch at https://<owner>.github.io/<repo>/ without any extra setup.
+  # Primary path: enable Pages if needed and deploy through GitHub Actions.
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  # Fallback path: keep a gh-pages branch up to date so the site can also be
+  # served with "Deploy from a branch" in the Pages settings.
+  publish-branch:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Publish to gh-pages
         run: |
           git config user.name "github-actions[bot]"
