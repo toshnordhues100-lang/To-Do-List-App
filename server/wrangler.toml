@@ -1,0 +1,19 @@
+name = "cadence-api"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+crons = ["* * * * *"]
+
+[[kv_namespaces]]
+binding = "KV"
+id = "__KV_ID__"
+
+[vars]
+# Origin allowed to call this API. "*" allows any site; set it to your app URL to lock it down.
+ALLOWED_ORIGIN = "*"
+# Address used in push authentication (any contact address for the operator).
+VAPID_SUBJECT = "mailto:owner@example.com"
+# Maximum Claude requests per device per day. Keeps the bill bounded.
+PARSE_DAILY_LIMIT = "400"

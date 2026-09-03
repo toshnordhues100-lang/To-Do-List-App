@@ -1,4 +1,4 @@
-name: Test and deploy to GitHub Pages
+name: Test and deploy
 
 on:
   push:
@@ -23,41 +23,103 @@ jobs:
         with:
           node-version: 22
       - run: npm test
+      - run: npm ci --omit=optional
+        working-directory: server
+      - run: npm test
+        working-directory: server
 
-  # Primary path: enable Pages if needed and deploy through GitHub Actions.
-  deploy:
+  # Deploys the Cloudflare Worker (Claude understanding + push reminders) when the
+  # repository has the Cloudflare and Anthropic secrets. Skipped otherwise.
+  worker:
     needs: test
     runs-on: ubuntu-latest
-    continue-on-error: true
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      api_url: ${{ steps.url.outputs.api_url }}
+    env:
+      HAS_CF: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
+      - uses: actions/setup-node@v4
+        if: env.HAS_CF == 'true'
         with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
+          node-version: 22
+      - run: npm ci --omit=optional
+        if: env.HAS_CF == 'true'
+        working-directory: server
+      - name: Create the KV namespace once and write its id into wrangler.toml
+        if: env.HAS_CF == 'true'
+        working-directory: server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -e
+          ID=$(npx wrangler kv namespace list | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const a=JSON.parse(s);const n=a.find(x=>x.title.endsWith("CADENCE_KV"));console.log(n?n.id:"")})')
+          if [ -z "$ID" ]; then
+            npx wrangler kv namespace create CADENCE_KV > create.log 2>&1 || true
+            cat create.log
+            ID=$(grep -oE 'id = "[a-f0-9]+"' create.log | head -1 | grep -oE '[a-f0-9]{16,}')
+          fi
+          if [ -z "$ID" ]; then
+            ID=$(npx wrangler kv namespace list | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const a=JSON.parse(s);const n=a.find(x=>x.title.endsWith("CADENCE_KV"));console.log(n?n.id:"")})')
+          fi
+          test -n "$ID" || { echo "Could not determine KV namespace id"; exit 1; }
+          sed -i "s/__KV_ID__/$ID/" wrangler.toml
+          grep -n 'id = ' wrangler.toml
+      - name: Deploy the worker
+        if: env.HAS_CF == 'true'
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
         with:
-          path: .
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: server
+          secrets: |
+            ANTHROPIC_API_KEY
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Record the API address
+        id: url
+        run: |
+          if [ "$HAS_CF" = "true" ]; then
+            echo "api_url=${{ steps.deploy.outputs.deployment-url }}" >> "$GITHUB_OUTPUT"
+            echo "Worker deployed at ${{ steps.deploy.outputs.deployment-url }}"
+          else
+            echo "api_url=" >> "$GITHUB_OUTPUT"
+            echo "Cloudflare secrets not set; the app is deployed without the Claude and reminder server."
+          fi
 
-  # Fallback path: keep a gh-pages branch up to date so the site can also be
-  # served with "Deploy from a branch" in the Pages settings.
-  publish-branch:
-    needs: test
+  site:
+    needs: worker
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Point the app at the deployed worker
+        run: |
+          API="${{ needs.worker.outputs.api_url }}"
+          if [ -n "$API" ]; then
+            printf 'window.CADENCE_CONFIG = { apiUrl: "%s" };\n' "$API" > js/config.js
+          fi
+          cat js/config.js
       - name: Publish to gh-pages
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout --orphan gh-pages
           git rm -rfq --cached .
-          rm -rf .github tests tools node_modules
+          rm -rf .github tests tools server artifact node_modules
           touch .nojekyll
           git add -A
           git commit -qm "Deploy ${GITHUB_SHA}"
           git push --force origin gh-pages
+      # Also try the GitHub Actions Pages path; harmless when Pages is set to the branch.
+      - uses: actions/configure-pages@v5
+        continue-on-error: true
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        continue-on-error: true
+        with:
+          path: .
+      - uses: actions/deploy-pages@v4
+        continue-on-error: true

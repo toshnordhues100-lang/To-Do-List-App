@@ -1,6 +1,7 @@
-// Service worker: precaches the app shell so Cadence opens instantly and works offline.
+// Service worker: precaches the app shell so Cadence opens instantly and works
+// offline, and shows push reminders sent by the Cadence API.
 // Bump CACHE_VERSION whenever files change so installed phones pick up the update.
-const CACHE_VERSION = 'cadence-v1';
+const CACHE_VERSION = 'cadence-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -10,6 +11,7 @@ const ASSETS = [
   './js/dates.js',
   './js/store.js',
   './js/voice.js',
+  './js/config.js',
   './manifest.webmanifest',
   './icons/icon.svg',
   './icons/icon-192.png',
@@ -35,7 +37,6 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET' || !request.url.startsWith(self.location.origin)) return;
-  // Network first for the shell so updates arrive quickly; cache fallback keeps it working offline.
   event.respondWith(
     fetch(request)
       .then((response) => {
@@ -49,6 +50,21 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { title: 'Reminder', body: event.data ? event.data.text() : '' }; }
+  const title = data.title || 'Reminder';
+  const options = {
+    body: data.body || '',
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png',
+    tag: data.id ? `cadence-${data.id}` : undefined,
+    data: { id: data.id || null, url: './' },
+    requireInteraction: false,
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
@@ -58,4 +74,9 @@ self.addEventListener('notificationclick', (event) => {
       return self.clients.openWindow('./');
     }),
   );
+});
+
+self.addEventListener('pushsubscriptionchange', (event) => {
+  // The app re-registers on next open; nothing to do here without the device token.
+  event.waitUntil(Promise.resolve());
 });

@@ -1,5 +1,5 @@
 import {
-  WEEKDAYS, WEEKDAYS_SHORT, MONTHS, toISODate, fromISODate, addDays, daysBetween,
+  WEEKDAYS, WEEKDAYS_SHORT, MONTHS, toISODate, fromISODate, addDays,
   formatTime, formatDate, formatLongDate, formatDuration, toTimeString,
 } from './dates.js';
 import { parseInput, parseTask, findBestMatch } from './parser.js';
@@ -9,14 +9,25 @@ import {
 } from './store.js';
 import { VoiceInput, voiceSupported, speechSupported, speak, stopSpeaking } from './voice.js';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '2.0.0';
+const API = String((window.CADENCE_CONFIG && window.CADENCE_CONFIG.apiUrl) || '').replace(/\/+$/, '');
 const el = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
 
+const V2_DEFAULTS = {
+  ...DEFAULT_SETTINGS,
+  reminderLead: 0,
+  smartParsing: true,
+  remindByDefault: true,
+  dailyReminderTime: '09:00',
+  pushEnabled: false,
+  remindPrompted: false,
+};
+
 const state = {
   tasks: loadTasks(),
-  settings: loadSettings(),
+  settings: { ...V2_DEFAULTS, ...loadSettings() },
   view: 'list',
   listFilter: 'all',
   search: '',
@@ -25,11 +36,15 @@ const state = {
   undo: [],
   redo: [],
   listening: false,
+  thinking: false,
   completedOpen: false,
-  pending: null,        // parsed tasks awaiting confirmation
+  pending: null,
   editingId: null,
   installPrompt: null,
   briefedOn: localStorage.getItem('cadence.briefedOn') || '',
+  server: API ? 'unknown' : 'none',   // none | unknown | on | off
+  push: 'unknown',                    // unknown | on | off | unsupported | needs_install | denied
+  syncTimer: null,
 };
 
 // ---------------------------------------------------------------- utilities
@@ -63,9 +78,7 @@ function matchesSearch(task, q) {
   return q.toLowerCase().split(/\s+/).every((w) => hay.includes(w));
 }
 
-function tasksForDate(iso) {
-  return state.tasks.filter((t) => t.due === iso).sort(sortTasks);
-}
+function tasksForDate(iso) { return state.tasks.filter((t) => t.due === iso).sort(sortTasks); }
 
 function describeTask(task, { withDate = true } = {}) {
   const parts = [];
@@ -86,14 +99,43 @@ function spokenTask(task, { withDate = true } = {}) {
   return parts.join(', ');
 }
 
+function timeZoneName() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
+}
+
+function deviceToken() {
+  let t = localStorage.getItem('cadence.device');
+  if (!t || !/^[A-Za-z0-9_-]{16,128}$/.test(t)) {
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    t = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    localStorage.setItem('cadence.device', t);
+  }
+  return t;
+}
+
+function reminderMoment(task) {
+  // When this task should ring: its own time, or the daily reminder time for date-only tasks.
+  if (!task.due || task.completedAt || task.remind === false) return null;
+  const time = task.time || state.settings.dailyReminderTime || '09:00';
+  const [h, m] = time.split(':').map(Number);
+  const at = fromISODate(task.due);
+  at.setHours(h, m - (task.time ? state.settings.reminderLead : 0), 0, 0);
+  return at;
+}
+
 // ---------------------------------------------------------------- persistence + undo
+
+function afterChange() {
+  saveTasks(state.tasks);
+  scheduleReminderSync();
+}
 
 function commit(mutator) {
   state.undo.push(JSON.stringify(state.tasks));
   if (state.undo.length > 40) state.undo.shift();
   state.redo = [];
   const result = mutator();
-  saveTasks(state.tasks);
+  afterChange();
   render();
   return result;
 }
@@ -102,7 +144,7 @@ function undo() {
   if (!state.undo.length) { toast('Nothing to undo'); return false; }
   state.redo.push(JSON.stringify(state.tasks));
   state.tasks = JSON.parse(state.undo.pop());
-  saveTasks(state.tasks);
+  afterChange();
   render();
   toast('Undone');
   return true;
@@ -112,7 +154,7 @@ function redo() {
   if (!state.redo.length) { toast('Nothing to redo'); return false; }
   state.undo.push(JSON.stringify(state.tasks));
   state.tasks = JSON.parse(state.redo.pop());
-  saveTasks(state.tasks);
+  afterChange();
   render();
   toast('Redone');
   return true;
@@ -123,6 +165,7 @@ function updateSettings(patch) {
   saveSettings(state.settings);
   applyTheme();
   voice.setLanguage(state.settings.language);
+  if ('reminderLead' in patch || 'dailyReminderTime' in patch) scheduleReminderSync();
   render();
 }
 
@@ -131,10 +174,12 @@ function updateSettings(patch) {
 function addTasks(parsedTasks, source = 'text') {
   const created = parsedTasks.map((p) => {
     const fields = { ...p, source };
+    if (fields.remind === undefined) fields.remind = state.settings.remindByDefault;
     if (!fields.due && state.view === 'calendar' && state.selectedDate !== todayISO()) fields.due = state.selectedDate;
     return createTask(fields);
   });
   commit(() => { state.tasks.push(...created); });
+  maybePromptReminders(created);
   return created;
 }
 
@@ -151,10 +196,7 @@ function completeTask(task) {
 }
 
 function reopenTask(task) {
-  commit(() => {
-    const t = state.tasks.find((x) => x.id === task.id);
-    if (t) t.completedAt = null;
-  });
+  commit(() => { const t = state.tasks.find((x) => x.id === task.id); if (t) t.completedAt = null; });
 }
 
 function deleteTask(task) {
@@ -194,7 +236,7 @@ function toast(text, { action, onAction, duration = 4500 } = {}) {
 }
 
 function say(text) {
-  if (!state.settings.voiceFeedback || !speechSupported) return;
+  if (!state.settings.voiceFeedback || !speechSupported || !text) return;
   const wasListening = state.listening;
   if (wasListening) voice.pause();
   speak(text, { lang: state.settings.language, onEnd: () => { if (wasListening) voice.resume(); } });
@@ -206,141 +248,244 @@ function showResult(html) {
   box.hidden = false;
 }
 
+function resultCard(label, task) {
+  const at = reminderMoment(task);
+  const note = at && state.settings.pushEnabled ? ' · Reminder set' : '';
+  return `<div class="result-card"><span class="result-label">${esc(label)}</span><div><div class="result-title">${esc(task.title)}</div><div class="result-meta">${esc(describeTask(task)) || 'No date'}${esc(note)}</div></div></div>`;
+}
+
+let confirmResolve = null;
+function confirmAction({ title = 'Are you sure?', message = '', okLabel = 'Delete', danger = true } = {}) {
+  el('confirmTitle').textContent = title;
+  el('confirmText').textContent = message;
+  const ok = el('confirmOk');
+  ok.textContent = okLabel;
+  ok.className = danger ? 'btn danger' : 'btn primary';
+  el('confirmSheet').hidden = false;
+  el('backdrop').hidden = false;
+  return new Promise((resolve) => { confirmResolve = resolve; });
+}
+function closeConfirm(result) {
+  el('confirmSheet').hidden = true;
+  if (!anySheetOpen()) el('backdrop').hidden = true;
+  if (confirmResolve) { confirmResolve(result); confirmResolve = null; }
+}
+
+// ---------------------------------------------------------------- Claude understanding (through the Cadence API)
+
+async function smartParse(text) {
+  if (!API || !state.settings.smartParsing || state.server === 'off') return null;
+  try {
+    const res = await fetch(`${API}/api/parse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        now: new Date().toISOString(),
+        tz: timeZoneName(),
+        token: deviceToken(),
+        tasks: openTasks().sort(sortTasks).slice(0, 120).map((t) => ({ id: t.id, title: t.title, due: t.due, time: t.time })),
+      }),
+    });
+    if (res.status === 429) { toast('Claude is busy right now. Using the built-in understanding for this one.', { duration: 5000 }); return null; }
+    if (res.status === 503) { state.server = 'off'; return null; }
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !Array.isArray(data.actions) || data.ok === false) return null;
+    state.server = 'on';
+    const byId = new Map(state.tasks.map((t) => [t.id, t]));
+    const actions = data.actions.map((a) => (a.id ? { ...a, task: byId.get(String(a.id)) || null } : a)).filter((a) => !a.id || a.task);
+    return { actions, say: typeof data.say === 'string' ? data.say : '' };
+  } catch {
+    return null;
+  }
+}
+
+async function probeServer() {
+  if (!API) return;
+  try {
+    const res = await fetch(`${API}/api/health`, { cache: 'no-store' });
+    const data = res.ok ? await res.json() : null;
+    state.server = data && data.ok && data.claude ? 'on' : 'off';
+  } catch {
+    state.server = 'off';
+  }
+  if (state.view === 'settings') render();
+}
+
 // ---------------------------------------------------------------- command handling
 
-function handleInput(raw, source = 'text') {
+const LOCAL_ONLY = new Set(['navigate', 'undo', 'redo', 'stop', 'theme', 'search']);
+
+async function handleInput(raw) {
   const text = String(raw || '').trim();
   if (!text) return;
-  const cmd = parseInput(text, now());
-  let spokenReply = '';
+  const local = parseInput(text, now());
+  if (LOCAL_ONLY.has(local.type)) { await applyCommand(local); return; }
+
+  let cmds = null;
+  let sayText = '';
+  if (API && state.settings.smartParsing && state.server !== 'off') {
+    setThinking(true);
+    const smart = await smartParse(text);
+    setThinking(false);
+    if (smart && smart.actions.length) { cmds = smart.actions; sayText = smart.say; }
+    else if (smart) { cmds = [{ type: 'none', reason: smart.say || 'Nothing to do' }]; sayText = smart.say; }
+  }
+  if (!cmds) cmds = [local];
+
+  const replies = [];
+  for (const cmd of cmds) {
+    const r = await applyCommand(cmd);
+    if (r) replies.push(r);
+  }
+  const spoken = sayText || replies.join('. ');
+  if (spoken) say(spoken);
+}
+
+function setThinking(on) {
+  state.thinking = on;
+  el('captureDot').classList.toggle('thinking', on);
+  if (on) {
+    el('captureStatus').textContent = 'Understanding';
+    el('transcript').classList.add('thinking');
+  } else {
+    el('transcript').classList.remove('thinking');
+    renderMicState('Ready');
+  }
+}
+
+async function applyCommand(cmd) {
+  const resolveTask = (c, { includeCompleted = false } = {}) => {
+    if (c.task) return state.tasks.find((t) => t.id === c.task.id) || null;
+    if (c.query) { const m = findTask(c.query, { includeCompleted }); return m ? m.task : null; }
+    return null;
+  };
+  const notFound = (q) => { showResult(`<p class="muted">No task matches "${esc(q || 'that')}".</p>`); return `I couldn't find a task matching ${q || 'that'}`; };
 
   switch (cmd.type) {
     case 'noop':
-      showResult(`<p class="muted">Nothing to add from "${esc(text)}".</p>`);
-      break;
+    case 'none':
+      showResult(`<p class="muted">${esc(cmd.reason || 'Nothing to add from that.')}</p>`);
+      return cmd.reason || '';
 
     case 'add': {
       if (state.settings.confirmBeforeAdd) {
         state.pending = cmd.tasks;
         renderPending();
-        spokenReply = cmd.tasks.length === 1 ? `Ready to save ${cmd.tasks[0].title}. Confirm?` : `Ready to save ${cmd.tasks.length} tasks.`;
-        break;
+        return cmd.tasks.length === 1 ? `Ready to save ${cmd.tasks[0].title}. Confirm?` : `Ready to save ${cmd.tasks.length} tasks.`;
       }
-      const created = addTasks(cmd.tasks, source);
+      const created = addTasks(cmd.tasks, 'voice');
       showResult(created.map((t) => resultCard('Added', t)).join(''));
       toast(created.length === 1 ? `Added "${created[0].title}"` : `Added ${created.length} tasks`, { action: 'Undo', onAction: undo });
-      spokenReply = created.length === 1 ? `Added ${spokenTask(created[0])}` : `Added ${created.length} tasks`;
-      break;
+      return created.length === 1 ? `Added ${spokenTask(created[0])}` : `Added ${created.length} tasks`;
     }
 
     case 'complete': {
-      const m = findTask(cmd.query);
-      if (!m) { spokenReply = `I couldn't find a task matching ${cmd.query}`; showResult(`<p class="muted">No open task matches "${esc(cmd.query)}".</p>`); break; }
-      completeTask(m.task);
-      showResult(resultCard('Completed', m.task));
-      toast(`Completed "${m.task.title}"`, { action: 'Undo', onAction: undo });
-      spokenReply = `Completed ${m.task.title}`;
-      break;
+      const t = resolveTask(cmd);
+      if (!t) return notFound(cmd.query);
+      completeTask(t);
+      showResult(resultCard('Completed', t));
+      toast(`Completed "${t.title}"`, { action: 'Undo', onAction: undo });
+      return `Completed ${t.title}`;
     }
 
     case 'completeAll': {
       const due = openTasks().filter((t) => t.due && t.due <= todayISO());
-      if (!due.length) { spokenReply = 'Nothing due today'; break; }
+      if (!due.length) return 'Nothing due today';
       commit(() => { due.forEach((t) => { const x = state.tasks.find((y) => y.id === t.id); if (x) x.completedAt = new Date().toISOString(); }); });
       toast(`Completed ${due.length} tasks`, { action: 'Undo', onAction: undo });
-      spokenReply = `Completed ${due.length} tasks due today`;
-      break;
+      return `Completed ${due.length} tasks due today`;
     }
 
     case 'reopen': {
-      const m = findBestMatch(cmd.query, completedTasks());
-      if (!m) { spokenReply = `No completed task matches ${cmd.query}`; break; }
-      reopenTask(m.task);
-      toast(`Reopened "${m.task.title}"`, { action: 'Undo', onAction: undo });
-      spokenReply = `Reopened ${m.task.title}`;
-      break;
+      const t = cmd.task ? state.tasks.find((x) => x.id === cmd.task.id) : (findBestMatch(cmd.query || '', completedTasks()) || {}).task;
+      if (!t) return `No completed task matches ${cmd.query || 'that'}`;
+      reopenTask(t);
+      toast(`Reopened "${t.title}"`, { action: 'Undo', onAction: undo });
+      return `Reopened ${t.title}`;
     }
 
     case 'delete': {
-      const m = findTask(cmd.query, { includeCompleted: true });
-      if (!m) { spokenReply = `I couldn't find a task matching ${cmd.query}`; showResult(`<p class="muted">No task matches "${esc(cmd.query)}".</p>`); break; }
-      deleteTask(m.task);
-      showResult(resultCard('Deleted', m.task));
-      toast(`Deleted "${m.task.title}"`, { action: 'Undo', onAction: undo });
-      spokenReply = `Deleted ${m.task.title}`;
-      break;
+      const t = resolveTask(cmd, { includeCompleted: true });
+      if (!t) return notFound(cmd.query);
+      deleteTask(t);
+      showResult(resultCard('Deleted', t));
+      toast(`Deleted "${t.title}"`, { action: 'Undo', onAction: undo });
+      return `Deleted ${t.title}`;
     }
 
-    case 'deleteAll':
-      showResult('<p class="muted">Deleting everything needs confirmation. Use Settings, Data, Delete all tasks.</p>');
-      spokenReply = 'To delete everything, use the settings screen';
-      break;
+    case 'deleteAll': {
+      if (!state.tasks.length) return 'There is nothing to delete';
+      const ok = await confirmAction({ title: 'Delete every task?', message: `This removes all ${state.tasks.length} tasks permanently. You can undo right after.`, okLabel: 'Delete all' });
+      if (!ok) return 'Cancelled';
+      commit(() => { state.tasks = []; });
+      toast('Deleted all tasks', { action: 'Undo', onAction: undo, duration: 8000 });
+      return 'Deleted everything';
+    }
 
     case 'reschedule': {
-      const m = findTask(cmd.query);
-      if (!m) { spokenReply = `I couldn't find a task matching ${cmd.query}`; break; }
+      const t = resolveTask(cmd);
+      if (!t) return notFound(cmd.query);
       const patch = {};
-      if (cmd.byDays) patch.due = toISODate(addDays(fromISODate(m.task.due) || now(), cmd.byDays));
+      if (cmd.byDays) patch.due = toISODate(addDays(fromISODate(t.due) || now(), cmd.byDays));
       if (cmd.due) patch.due = cmd.due;
-      if (cmd.time) { patch.time = cmd.time; if (!patch.due && !m.task.due) patch.due = todayISO(); }
-      patchTask(m.task, patch);
-      const updated = state.tasks.find((t) => t.id === m.task.id);
+      if (cmd.time) { patch.time = cmd.time; if (!patch.due && !t.due) patch.due = todayISO(); }
+      patchTask(t, patch);
+      const updated = state.tasks.find((x) => x.id === t.id);
       showResult(resultCard('Rescheduled', updated));
       toast(`Moved "${updated.title}" to ${formatDate(updated.due, now())}`, { action: 'Undo', onAction: undo });
-      spokenReply = `Moved ${spokenTask(updated)}`;
-      break;
+      return `Moved ${spokenTask(updated)}`;
     }
 
     case 'setPriority': {
-      const m = findTask(cmd.query);
-      if (!m) { spokenReply = `I couldn't find a task matching ${cmd.query}`; break; }
-      patchTask(m.task, { priority: cmd.priority });
-      toast(`${m.task.title}: ${cmd.priority} priority`, { action: 'Undo', onAction: undo });
-      spokenReply = `${m.task.title} is now ${cmd.priority} priority`;
-      break;
+      const t = resolveTask(cmd);
+      if (!t) return notFound(cmd.query);
+      patchTask(t, { priority: cmd.priority });
+      toast(`${t.title}: ${cmd.priority} priority`, { action: 'Undo', onAction: undo });
+      return `${t.title} is now ${cmd.priority} priority`;
     }
 
     case 'rename': {
-      const m = findTask(cmd.query);
-      if (!m) { spokenReply = `I couldn't find a task matching ${cmd.query}`; break; }
-      patchTask(m.task, { title: cmd.title });
+      const t = resolveTask(cmd);
+      if (!t) return notFound(cmd.query);
+      patchTask(t, { title: cmd.title });
       toast(`Renamed to "${cmd.title}"`, { action: 'Undo', onAction: undo });
-      spokenReply = `Renamed to ${cmd.title}`;
-      break;
+      return `Renamed to ${cmd.title}`;
     }
 
     case 'clearCompleted': {
       const n = completedTasks().length;
-      if (!n) { spokenReply = 'No completed tasks to clear'; break; }
+      if (!n) return 'No completed tasks to clear';
+      const ok = await confirmAction({ title: 'Clear completed tasks?', message: `${n} completed ${n === 1 ? 'task' : 'tasks'} will be removed permanently.`, okLabel: 'Clear' });
+      if (!ok) return 'Cancelled';
       commit(() => { state.tasks = openTasks(); });
       toast(`Cleared ${n} completed`, { action: 'Undo', onAction: undo });
-      spokenReply = `Cleared ${n} completed tasks`;
-      break;
+      return `Cleared ${n} completed tasks`;
     }
 
     case 'navigate': {
       if (cmd.view === 'today' || cmd.view === 'tomorrow') {
         state.selectedDate = toISODate(addDays(now(), cmd.view === 'today' ? 0 : 1));
-        state.calMonth = new Date(fromISODate(state.selectedDate).getFullYear(), fromISODate(state.selectedDate).getMonth(), 1);
+        const d = fromISODate(state.selectedDate);
+        state.calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
         setView('calendar');
       } else if (cmd.view === 'overdue') { state.listFilter = 'overdue'; setView('list'); }
       else if (cmd.view === 'completed') { state.completedOpen = true; state.listFilter = 'all'; setView('list'); }
       else setView(cmd.view);
       closeCapture();
-      spokenReply = '';
-      break;
+      return '';
     }
 
     case 'theme':
       updateSettings({ theme: cmd.theme });
       toast(`${cap(cmd.theme)} theme`);
-      break;
+      return '';
 
     case 'read': {
       const { text: readText, html } = readBack(cmd);
       showResult(html);
-      spokenReply = readText;
-      break;
+      return readText;
     }
 
     case 'search':
@@ -349,19 +494,13 @@ function handleInput(raw, source = 'text') {
       el('searchBar').hidden = !cmd.query;
       setView('list');
       closeCapture();
-      break;
+      return '';
 
-    case 'undo': undo(); spokenReply = state.settings.voiceFeedback ? 'Undone' : ''; break;
-    case 'redo': redo(); break;
-    case 'stop': stopListening(); closeCapture(); break;
-    default: break;
+    case 'undo': undo(); return 'Undone';
+    case 'redo': redo(); return '';
+    case 'stop': stopListening(); closeCapture(); return '';
+    default: return '';
   }
-
-  if (spokenReply) say(spokenReply);
-}
-
-function resultCard(label, task) {
-  return `<div class="result-card"><span class="result-label">${esc(label)}</span><div><div class="result-title">${esc(task.title)}</div><div class="result-meta">${esc(describeTask(task)) || 'No date'}</div></div></div>`;
 }
 
 function readBack(cmd) {
@@ -373,10 +512,9 @@ function readBack(cmd) {
   else if (cmd.scope === 'week') { const end = toISODate(addDays(now(), 6)); list = openTasks().filter((x) => x.due && x.due <= end); label = 'this week'; }
   else if (cmd.scope === 'nextweek') { const s = toISODate(addDays(now(), 7)); const e = toISODate(addDays(now(), 13)); list = openTasks().filter((x) => x.due && x.due >= s && x.due <= e); label = 'next week'; }
   else if (cmd.scope === 'overdue') { list = openTasks().filter(isOverdue); label = 'overdue'; }
-  else if (cmd.scope === 'date') { list = openTasks().filter((x) => x.due === cmd.date); label = 'on ' + formatDate(cmd.date, now()); }
+  else if (cmd.scope === 'date' && cmd.date) { list = openTasks().filter((x) => x.due === cmd.date); label = 'on ' + formatDate(cmd.date, now()); }
   else { list = openTasks(); label = 'in total'; }
   list = list.slice().sort(sortTasks);
-
   const withDate = !['today', 'tomorrow', 'date'].includes(cmd.scope);
   let text;
   if (!list.length) text = `Nothing ${label === 'in total' ? 'open' : label}.`;
@@ -402,6 +540,205 @@ function renderPending() {
     </div>`);
 }
 
+// ---------------------------------------------------------------- reminders (push through the Cadence API)
+
+function pushSupport() {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  if (!API) return 'no_server';
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+    return isIOS && !standalone ? 'needs_install' : 'unsupported';
+  }
+  if (isIOS && !standalone) return 'needs_install';
+  return 'ok';
+}
+
+function urlBase64ToUint8Array(base64) {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+async function enableReminders({ silent = false } = {}) {
+  const support = pushSupport();
+  if (support !== 'ok') {
+    state.push = support === 'needs_install' ? 'needs_install' : 'unsupported';
+    if (!silent) {
+      if (support === 'needs_install') openRemindSheet({ steps: true });
+      else toast('This browser cannot show reminders when the app is closed. Chrome on Android or an installed app on iPhone can.', { duration: 8000 });
+    }
+    render();
+    return false;
+  }
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      state.push = 'denied';
+      if (!silent) toast('Reminders stay off until notifications are allowed for Cadence in your phone settings.', { duration: 8000 });
+      render();
+      return false;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    const keyRes = await fetch(`${API}/api/vapid`);
+    const { publicKey } = await keyRes.json();
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+    const res = await fetch(`${API}/api/devices/${deviceToken()}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: sub.toJSON(), tz: timeZoneName() }),
+    });
+    if (!res.ok) throw new Error('register failed');
+    state.push = 'on';
+    updateSettings({ pushEnabled: true, remindPrompted: true });
+    await syncReminders();
+    if (!silent) toast('Reminders are on. You will be notified even when the app is closed.', { duration: 6000 });
+    return true;
+  } catch (e) {
+    state.push = 'off';
+    if (!silent) toast('Could not turn on reminders. Check your connection and try again.', { duration: 7000 });
+    render();
+    return false;
+  }
+}
+
+async function disableReminders() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await sub.unsubscribe();
+    await fetch(`${API}/api/devices/${deviceToken()}`, { method: 'DELETE' });
+  } catch { /* ignore */ }
+  state.push = 'off';
+  updateSettings({ pushEnabled: false });
+  toast('Reminders are off');
+}
+
+function scheduleReminderSync() {
+  if (!API || !state.settings.pushEnabled) return;
+  clearTimeout(state.syncTimer);
+  state.syncTimer = setTimeout(() => { syncReminders(); }, 1200);
+}
+
+async function syncReminders() {
+  if (!API || !state.settings.pushEnabled) return;
+  const horizon = now().getTime() - 30 * 60000;
+  const reminders = openTasks().map((t) => {
+    const at = reminderMoment(t);
+    if (!at || at.getTime() < horizon) return null;
+    const when = t.time ? formatTime(t.time, state.settings.hour12) : formatDate(t.due, now());
+    return { id: t.id, title: t.title, body: t.time ? `${formatDate(t.due, now())} · ${when}` : `Due ${when.toLowerCase()}`, at: at.toISOString() };
+  }).filter(Boolean);
+  try {
+    const res = await fetch(`${API}/api/devices/${deviceToken()}/reminders`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reminders }),
+    });
+    if (res.ok) { const d = await res.json(); if (d && d.subscribed === false) state.push = 'off'; }
+  } catch { /* offline: next change retries */ }
+}
+
+async function restorePushState() {
+  if (!API) { state.push = 'unsupported'; return; }
+  const support = pushSupport();
+  if (support !== 'ok') { state.push = support === 'needs_install' ? 'needs_install' : 'unsupported'; return; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub && Notification.permission === 'granted') {
+      state.push = 'on';
+      if (!state.settings.pushEnabled) updateSettings({ pushEnabled: true });
+      // Re-register in case the server forgot us; cheap.
+      fetch(`${API}/api/devices/${deviceToken()}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON(), tz: timeZoneName() }) }).then(() => syncReminders()).catch(() => {});
+    } else {
+      state.push = Notification.permission === 'denied' ? 'denied' : 'off';
+      if (state.settings.pushEnabled) updateSettings({ pushEnabled: false });
+    }
+  } catch {
+    state.push = 'off';
+  }
+  if (state.view === 'settings') render();
+}
+
+function maybePromptReminders(created) {
+  if (!API || state.settings.pushEnabled || state.settings.remindPrompted) return;
+  if (!created.some((t) => reminderMoment(t))) return;
+  if (['unsupported'].includes(state.push)) return;
+  setTimeout(() => openRemindSheet({ steps: pushSupport() === 'needs_install' }), 600);
+}
+
+function openRemindSheet({ steps = false } = {}) {
+  if (!el('captureSheet').hidden) closeCapture();
+  el('remindSteps').hidden = !steps;
+  el('remindOn').hidden = steps;
+  el('remindText').textContent = steps
+    ? 'On iPhone, reminders work once Cadence is on your home screen. It takes three taps:'
+    : 'Cadence can notify you when a task is due, even when the app is closed and your phone is locked. Every task with a date gets a reminder unless you switch it off for that task.';
+  el('remindSheet').hidden = false;
+  el('backdrop').hidden = false;
+}
+
+function closeRemindSheet() {
+  el('remindSheet').hidden = true;
+  if (!anySheetOpen()) el('backdrop').hidden = true;
+}
+
+// In-app reminders for phones without push: a toast and a spoken line while the app is open.
+function checkRemindersLocally() {
+  if (state.settings.pushEnabled) return;
+  const n = now();
+  let changed = false;
+  for (const task of openTasks()) {
+    if (task.notifiedAt) continue;
+    const at = reminderMoment(task);
+    if (!at) continue;
+    const diffMin = (at - n) / 60000;
+    if (diffMin <= 0 && diffMin > -30) {
+      toast(`Reminder: ${task.title}${task.time ? ' · ' + formatTime(task.time, state.settings.hour12) : ''}`, { duration: 15000 });
+      say(`Reminder: ${task.title}`);
+      task.notifiedAt = n.toISOString();
+      changed = true;
+    }
+  }
+  if (changed) saveTasks(state.tasks);
+}
+
+// ---------------------------------------------------------------- calendar file for one task
+
+function icsForTask(task) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp = (d) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}00Z`;
+  const escapeText = (s) => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Cadence//EN', 'BEGIN:VEVENT', `UID:${task.id}@cadence`, `DTSTAMP:${stamp(new Date())}`, `SUMMARY:${escapeText(task.title)}`];
+  if (task.time) {
+    const [h, m] = task.time.split(':').map(Number);
+    const start = fromISODate(task.due); start.setHours(h, m, 0, 0);
+    const end = new Date(start.getTime() + (task.durationMin || 30) * 60000);
+    lines.push(`DTSTART:${stamp(start)}`, `DTEND:${stamp(end)}`);
+  } else {
+    const d = task.due.replace(/-/g, '');
+    const next = toISODate(addDays(fromISODate(task.due), 1)).replace(/-/g, '');
+    lines.push(`DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${next}`);
+  }
+  if (task.notes) lines.push(`DESCRIPTION:${escapeText(task.notes)}`);
+  lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${escapeText(task.title)}`, `TRIGGER:-PT${task.time ? state.settings.reminderLead : 0}M`, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR');
+  return lines.join('\r\n');
+}
+
+function downloadText(filename, text, type) {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 // ---------------------------------------------------------------- voice
 
 const voice = new VoiceInput({
@@ -411,15 +748,15 @@ const voice = new VoiceInput({
   onFinal: (text) => {
     el('transcript').textContent = text;
     el('transcript').classList.remove('interim');
-    handleInput(text, 'voice');
     if (!state.settings.continuous) voice.stop();
+    handleInput(text);
   },
-  onEnd: () => { state.listening = false; renderMicState('Ready'); },
+  onEnd: () => { state.listening = false; if (!state.thinking) renderMicState('Ready'); },
   onError: (err) => {
     state.listening = false;
     const messages = {
       unsupported: 'Voice input is not supported in this browser. Use Chrome on Android or Safari on iPhone, or type instead.',
-      'not-allowed': 'Microphone access was blocked. Allow the microphone for this site in your browser settings.',
+      'not-allowed': 'Microphone access was blocked. Allow the microphone for Cadence in your phone settings, or type instead.',
       'service-not-allowed': 'Speech recognition is unavailable here. Try Chrome or Safari, or type instead.',
       'audio-capture': 'No microphone was found.',
       network: 'Speech recognition needs a network connection on this device.',
@@ -473,6 +810,10 @@ function maybeBrief(then) {
 
 // ---------------------------------------------------------------- sheets
 
+function anySheetOpen() {
+  return ['captureSheet', 'taskSheet', 'remindSheet', 'confirmSheet'].some((id) => !el(id).hidden);
+}
+
 function openCapture({ focusInput = false } = {}) {
   el('captureSheet').hidden = false;
   el('backdrop').hidden = false;
@@ -482,36 +823,37 @@ function openCapture({ focusInput = false } = {}) {
 
 function closeCapture() {
   el('captureSheet').hidden = true;
-  if (el('taskSheet').hidden) el('backdrop').hidden = true;
   el('captureResult').hidden = true;
   state.pending = null;
   if (state.listening) stopListening();
+  if (!anySheetOpen()) el('backdrop').hidden = true;
 }
 
 function openTaskSheet(task) {
   state.editingId = task ? task.id : null;
-  el('taskSheetTitle').textContent = task && state.tasks.some((t) => t.id === task.id) ? 'Edit task' : 'New task';
-  const t = task || { title: '', due: null, time: null, priority: 'normal', repeat: null, durationMin: null, tags: [], notes: '' };
+  const exists = Boolean(task && state.tasks.some((x) => x.id === task.id));
+  el('taskSheetTitle').textContent = exists ? 'Edit task' : 'New task';
+  const t = task || { title: '', due: null, time: null, priority: 'normal', repeat: null, durationMin: null, tags: [], notes: '', remind: state.settings.remindByDefault };
   el('tTitle').value = t.title;
   el('tDate').value = t.due || '';
   el('tTime').value = t.time || '';
+  el('tRemind').checked = t.remind !== false;
   document.querySelector(`#tPriority input[value="${t.priority}"]`).checked = true;
   el('tRepeat').value = t.repeat || '';
   el('tDuration').value = t.durationMin || '';
   el('tTags').value = (t.tags || []).join(', ');
   el('tNotes').value = t.notes || '';
-  const exists = task && state.tasks.some((x) => x.id === task.id);
   el('taskDelete').hidden = !exists;
   el('taskComplete').hidden = !exists || Boolean(task.completedAt);
+  el('taskCalendar').hidden = !(exists && task.due);
   el('taskSheet').hidden = false;
   el('backdrop').hidden = false;
-  el('taskSheet').dataset.draft = exists ? '' : JSON.stringify(t);
 }
 
 function closeTaskSheet() {
   el('taskSheet').hidden = true;
-  if (el('captureSheet').hidden) el('backdrop').hidden = true;
   state.editingId = null;
+  if (!anySheetOpen()) el('backdrop').hidden = true;
 }
 
 function readTaskSheet() {
@@ -523,6 +865,7 @@ function readTaskSheet() {
     title,
     due: due || (time ? todayISO() : null),
     time,
+    remind: el('tRemind').checked,
     priority: document.querySelector('#tPriority input:checked').value,
     repeat: el('tRepeat').value || null,
     durationMin: Number(el('tDuration').value) || null,
@@ -535,13 +878,8 @@ function saveTaskSheet() {
   const fields = readTaskSheet();
   if (!fields.title) { el('tTitle').focus(); return; }
   const existing = state.editingId && state.tasks.find((t) => t.id === state.editingId);
-  if (existing) {
-    patchTask(existing, fields);
-    toast('Saved', { action: 'Undo', onAction: undo });
-  } else {
-    addTasks([fields], 'text');
-    toast(`Added "${fields.title}"`, { action: 'Undo', onAction: undo });
-  }
+  if (existing) { patchTask(existing, fields); toast('Saved', { action: 'Undo', onAction: undo }); }
+  else { addTasks([fields], 'text'); toast(`Added "${fields.title}"`, { action: 'Undo', onAction: undo }); }
   closeTaskSheet();
 }
 
@@ -584,6 +922,7 @@ function taskRow(task, { showDate = true } = {}) {
   if (task.time) meta.push(`<span class="${overdue ? 'overdue' : ''}">${esc(formatTime(task.time, state.settings.hour12))}</span>`);
   if (task.durationMin) meta.push(`<span>${esc(formatDuration(task.durationMin))}</span>`);
   if (task.repeat) meta.push(`<span class="with-icon"><svg><use href="#i-repeat"/></svg>${esc(REPEAT_LABELS[task.repeat])}</span>`);
+  if (task.due && !task.completedAt && task.remind === false) meta.push('<span class="with-icon off" title="No reminder"><svg><use href="#i-bell-off"/></svg>No reminder</span>');
   task.tags.forEach((t) => meta.push(`<span class="tag">${esc(t)}</span>`));
   if (task.notes) meta.push(`<span class="muted">${esc(task.notes.length > 60 ? task.notes.slice(0, 60) + '…' : task.notes)}</span>`);
   return `<li class="task prio-${task.priority} ${task.completedAt ? 'done' : ''}" data-id="${task.id}">
@@ -601,7 +940,6 @@ function renderList() {
   const weekEnd = toISODate(addDays(now(), 6));
   let open = openTasks().filter((x) => matchesSearch(x, state.search));
   const allTags = [...new Set(openTasks().flatMap((x) => x.tags))].sort();
-
   const f = state.listFilter;
   if (f === 'today') open = open.filter((x) => x.due && x.due <= t);
   else if (f === 'upcoming') open = open.filter((x) => x.due && x.due > t);
@@ -610,19 +948,12 @@ function renderList() {
   else if (f === 'overdue') open = open.filter(isOverdue);
   else if (f.startsWith('tag:')) open = open.filter((x) => x.tags.includes(f.slice(4)));
 
-  const chips = [
-    ['all', 'All'], ['today', 'Today'], ['upcoming', 'Upcoming'], ['high', 'High priority'], ['nodate', 'No date'],
-    ...allTags.map((tag) => ['tag:' + tag, '#' + tag]),
-  ];
+  const chips = [['all', 'All'], ['today', 'Today'], ['upcoming', 'Upcoming'], ['high', 'High priority'], ['nodate', 'No date'], ...allTags.map((tag) => ['tag:' + tag, '#' + tag])];
   const chipsHtml = `<div class="chips" role="tablist">${chips.map(([k, label]) => `<button class="chip ${f === k ? 'active' : ''}" data-filter="${esc(k)}" role="tab">${esc(label)}</button>`).join('')}</div>`;
 
   const groups = [
-    { key: 'overdue', label: 'Overdue', items: [] },
-    { key: 'today', label: 'Today', items: [] },
-    { key: 'tomorrow', label: 'Tomorrow', items: [] },
-    { key: 'week', label: 'Next 7 days', items: [] },
-    { key: 'later', label: 'Later', items: [] },
-    { key: 'nodate', label: 'No date', items: [] },
+    { key: 'overdue', label: 'Overdue', items: [] }, { key: 'today', label: 'Today', items: [] }, { key: 'tomorrow', label: 'Tomorrow', items: [] },
+    { key: 'week', label: 'Next 7 days', items: [] }, { key: 'later', label: 'Later', items: [] }, { key: 'nodate', label: 'No date', items: [] },
   ];
   for (const task of open.sort(sortTasks)) {
     if (!task.due) groups[5].items.push(task);
@@ -632,27 +963,23 @@ function renderList() {
     else if (task.due <= weekEnd) groups[3].items.push(task);
     else groups[4].items.push(task);
   }
-
   let body = groups.filter((g) => g.items.length).map((g) => `
     <section class="group">
       <h2 class="group-title">${g.label}<span class="count">${g.items.length}</span></h2>
       <ul class="tasks">${g.items.map((x) => taskRow(x, { showDate: !['today', 'tomorrow'].includes(g.key) })).join('')}</ul>
     </section>`).join('');
-
   if (!body) {
     body = `<div class="empty">
       <p class="empty-title">${state.search || f !== 'all' ? 'No matching tasks' : 'Nothing here yet'}</p>
-      <p class="muted">${state.search || f !== 'all' ? 'Try a different filter or search.' : voiceSupported ? 'Tap the microphone and say something like "Call the dentist tomorrow at 3".' : 'Use the keyboard button to type your first task.'}</p>
+      <p class="muted">${state.search || f !== 'all' ? 'Try a different filter or search.' : voiceSupported ? 'Tap the microphone and say something like "Remind me tomorrow at 8 pm to wash the dishes".' : 'Use the keyboard button to type your first task.'}</p>
     </div>`;
   }
-
   const done = completedTasks().filter((x) => matchesSearch(x, state.search)).sort((a, b) => (a.completedAt < b.completedAt ? 1 : -1));
   const doneHtml = state.settings.showCompleted && done.length ? `
     <section class="group completed-group">
       <button class="group-title toggle" data-action="toggle-completed" aria-expanded="${state.completedOpen}">Completed<span class="count">${done.length}</span><svg class="chev ${state.completedOpen ? 'open' : ''}"><use href="#i-right"/></svg></button>
       ${state.completedOpen ? `<ul class="tasks">${done.slice(0, 50).map((x) => taskRow(x)).join('')}</ul><button class="btn text small" data-action="clear-completed">Clear completed</button>` : ''}
     </section>` : '';
-
   return chipsHtml + body + doneHtml;
 }
 
@@ -672,7 +999,6 @@ function renderCalendar() {
     if (task.completedAt) counts[task.due].done += 1;
     else { counts[task.due].open += 1; if (task.priority === 'high') counts[task.due].high += 1; }
   }
-
   const headers = [];
   for (let i = 0; i < 7; i += 1) headers.push(`<div class="dow">${WEEKDAYS_SHORT[(weekStart + i) % 7]}</div>`);
   const cells = [];
@@ -688,12 +1014,10 @@ function renderCalendar() {
       <span class="num">${d.getDate()}</span>${dots}${c && c.open ? `<span class="badge">${c.open}</span>` : ''}
     </button>`);
   }
-
   const dayTasks = tasksForDate(state.selectedDate);
   const openForDay = dayTasks.filter((x) => !x.completedAt);
   const doneForDay = dayTasks.filter((x) => x.completedAt);
   const totalMin = openForDay.reduce((s, x) => s + (x.durationMin || 0), 0);
-
   const agenda = `<section class="agenda">
     <div class="agenda-head">
       <h2>${esc(formatDate(state.selectedDate, now()))}<span class="muted"> ${esc(formatLongDate(state.selectedDate).split(', ')[1])}</span></h2>
@@ -703,7 +1027,6 @@ function renderCalendar() {
     ${doneForDay.length ? `<ul class="tasks done-list">${doneForDay.map((x) => taskRow(x, { showDate: false })).join('')}</ul>` : ''}
     <button class="btn secondary block" data-action="add-for-day">Add a task for this day</button>
   </section>`;
-
   return `<div class="cal">
     <div class="cal-nav">
       <button class="icon-btn" data-action="cal-prev" aria-label="Previous month"><svg><use href="#i-left"/></svg></button>
@@ -726,35 +1049,25 @@ function renderInsights() {
   const monthAgo = toISODate(addDays(now(), -29));
   const recent = state.tasks.filter((x) => (x.due && x.due >= monthAgo && x.due <= t) || (x.completedAt && x.completedAt.slice(0, 10) >= monthAgo));
   const rate = recent.length ? Math.round((recent.filter((x) => x.completedAt).length / recent.length) * 100) : null;
-
-  // Streak: consecutive days with at least one completion, ending today or yesterday.
   const doneDays = new Set(done.map((x) => x.completedAt.slice(0, 10)));
   let streak = 0;
   let cursor = doneDays.has(t) ? now() : addDays(now(), -1);
   while (doneDays.has(toISODate(cursor))) { streak += 1; cursor = addDays(cursor, -1); }
-
-  // Last 14 days of completions
   const days = [];
   for (let i = 13; i >= 0; i -= 1) {
     const iso = toISODate(addDays(now(), -i));
     days.push({ iso, n: done.filter((x) => x.completedAt.slice(0, 10) === iso).length });
   }
   const max = Math.max(1, ...days.map((d) => d.n));
-
-  // Weekday productivity
   const byDow = [0, 0, 0, 0, 0, 0, 0];
   done.forEach((x) => { byDow[new Date(x.completedAt).getDay()] += 1; });
   const bestDow = byDow.some(Boolean) ? WEEKDAYS[byDow.indexOf(Math.max(...byDow))] : null;
-
-  // Tags
   const tagCounts = {};
   open.forEach((x) => x.tags.forEach((tag) => { tagCounts[tag] = (tagCounts[tag] || 0) + 1; }));
   const tags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const tagMax = Math.max(1, ...tags.map((x) => x[1]));
-
   const highOpen = open.filter((x) => x.priority === 'high').length;
   const voiceShare = state.tasks.length ? Math.round((state.tasks.filter((x) => x.source === 'voice').length / state.tasks.length) * 100) : 0;
-
   return `
     <div class="stats">
       <div class="stat"><span class="stat-n">${open.length}</span><span class="stat-l">Open</span></div>
@@ -789,14 +1102,52 @@ function renderSettings() {
   const s = state.settings;
   const sw = (key, label, hint = '') => `<label class="row"><div><span class="row-l">${label}</span>${hint ? `<span class="row-h">${hint}</span>` : ''}</div><input type="checkbox" class="switch" data-setting="${key}" ${s[key] ? 'checked' : ''}></label>`;
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const langs = [['en-US', 'English (US)'], ['en-GB', 'English (UK)'], ['en-AU', 'English (Australia)'], ['en-IN', 'English (India)'], ['es-ES', 'Spanish'], ['fr-FR', 'French'], ['de-DE', 'German'], ['pt-BR', 'Portuguese (Brazil)'], ['it-IT', 'Italian'], ['nl-NL', 'Dutch']];
+
+  const claudePill = !API ? '<span class="pill warn">Not set up</span>'
+    : state.server === 'off' ? '<span class="pill warn">Unavailable</span>'
+      : state.server === 'unknown' ? '<span class="pill">Checking</span>'
+        : s.smartParsing ? '<span class="pill on">On</span>' : '<span class="pill">Off</span>';
+  const claudeHint = !API ? 'The app is running without its server, so the built-in understanding is used. See the README to deploy the server.'
+    : state.server === 'off' ? 'The server is not answering, so the built-in understanding is used for now.'
+      : 'Claude works out dates, times, priorities and commands from what you say. It runs on the app’s own server; nobody needs an account.';
+
+  const pushPill = state.push === 'on' ? '<span class="pill on">On</span>'
+    : state.push === 'needs_install' ? '<span class="pill warn">Add to Home Screen first</span>'
+      : state.push === 'denied' ? '<span class="pill warn">Blocked in phone settings</span>'
+        : state.push === 'unsupported' ? '<span class="pill warn">Unavailable here</span>'
+          : '<span class="pill">Off</span>';
+  const pushHint = !API ? 'Reminders outside the app need the server. Until then, reminders show while the app is open.'
+    : state.push === 'on' ? 'Every task with a date rings your phone at its time, or at the daily reminder time when it has no time, even with the app closed.'
+      : state.push === 'needs_install' ? 'On iPhone: tap Share in Safari, then "Add to Home Screen", then open Cadence from the home screen and turn reminders on here.'
+        : state.push === 'denied' ? 'Notifications were blocked. Allow them for Cadence in your phone’s notification settings, then turn reminders on here.'
+          : state.push === 'unsupported' ? 'This browser cannot deliver notifications when the app is closed.'
+            : 'Turn on to be notified at each task’s time, even when the app is closed and the phone is locked.';
+
   return `
+    <section class="panel">
+      <h2>Reminders</h2>
+      <div class="status-line"><div><span class="row-l">Phone notifications${pushPill}</span><span class="row-h">${pushHint}</span></div></div>
+      <div class="btn-row">
+        ${state.push === 'on' ? '<button class="btn secondary small" data-action="push-off">Turn off reminders</button><button class="btn secondary small" data-action="push-test">Send a test</button>' : API ? '<button class="btn primary small" data-action="push-on">Turn on reminders</button>' : ''}
+      </div>
+      ${sw('remindByDefault', 'Remind me for every new task', 'Switch a single task’s reminder off when you edit it')}
+      <label class="row"><div><span class="row-l">Daily reminder time</span><span class="row-h">For tasks that have a date but no time</span></div>
+        <input type="time" data-setting="dailyReminderTime" value="${esc(s.dailyReminderTime)}"></label>
+      <label class="row"><div><span class="row-l">Timed tasks ring</span></div>
+        <select data-setting="reminderLead">${[0, 5, 10, 15, 30, 60].map((v) => `<option value="${v}" ${s.reminderLead === v ? 'selected' : ''}>${v === 0 ? 'At the time' : v + ' min before'}</option>`).join('')}</select></label>
+    </section>
+    <section class="panel">
+      <h2>Understanding</h2>
+      <div class="status-line"><div><span class="row-l">Claude${claudePill}</span><span class="row-h">${claudeHint}</span></div></div>
+      ${API ? sw('smartParsing', 'Use Claude to understand speech', 'Turn off to use the faster built-in rules only') : ''}
+      ${sw('confirmBeforeAdd', 'Review before saving', 'Show the understood task and ask before it is added')}
+    </section>
     <section class="panel">
       <h2>Voice</h2>
       ${sw('voiceFeedback', 'Spoken confirmations', 'Reads back what was added or changed')}
       ${sw('continuous', 'Hands-free mode', 'Keep listening after each task until you say "stop"')}
-      ${sw('confirmBeforeAdd', 'Review before saving', 'Show the parsed task and ask before it is added')}
       ${sw('morningBriefing', 'Daily briefing', 'Reads today’s tasks the first time you tap the microphone each day')}
       <label class="row"><div><span class="row-l">Recognition language</span></div>
         <select data-setting="language">${langs.map(([v, l]) => `<option value="${v}" ${s.language === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -812,30 +1163,24 @@ function renderSettings() {
       ${sw('showCompleted', 'Show completed section in list')}
     </section>
     <section class="panel">
-      <h2>Reminders</h2>
-      ${sw('notifications', 'Notifications for timed tasks', 'Works while the app is open or installed. ' + (typeof Notification === 'undefined' ? 'Not supported in this browser.' : `Permission: ${Notification.permission}.`))}
-      <label class="row"><div><span class="row-l">Remind me</span></div>
-        <select data-setting="reminderLead">${[0, 5, 10, 15, 30, 60].map((v) => `<option value="${v}" ${s.reminderLead === v ? 'selected' : ''}>${v === 0 ? 'At the time' : v + ' min before'}</option>`).join('')}</select></label>
-      <button class="btn secondary small" data-action="test-notification">Send a test notification</button>
-    </section>
-    <section class="panel">
       <h2>Install on your phone</h2>
       ${standalone ? '<p class="row-note">Installed. You are running Cadence as an app.</p>' : state.installPrompt ? '<button class="btn primary block" data-action="install">Install Cadence</button>' : isIOS
-        ? '<p class="row-note">In Safari, tap the Share button, then "Add to Home Screen". The app opens full screen with the microphone available.</p>'
+        ? '<p class="row-note">In Safari, tap the Share button, then "Add to Home Screen". The app opens full screen and can deliver reminders.</p>'
         : '<p class="row-note">In Chrome, open the browser menu and choose "Add to Home screen" or "Install app".</p>'}
     </section>
     <section class="panel">
       <h2>Data</h2>
-      <p class="row-note">Everything is stored on this device only. Export a backup before switching phones.</p>
+      <p class="row-note">Your tasks are stored on this phone. They stay until you delete them. Save a backup before switching phones.</p>
       <div class="btn-row">
-        <button class="btn secondary small" data-action="export">Export backup</button>
-        <button class="btn secondary small" data-action="import">Import backup</button>
+        <button class="btn secondary small" data-action="export">Save a backup</button>
+        <button class="btn secondary small" data-action="import">Restore a backup</button>
         <input type="file" id="importFile" accept="application/json,.json" hidden>
       </div>
       <div class="btn-row">
         <button class="btn secondary small" data-action="clear-completed">Clear completed</button>
         <button class="btn danger-text small" data-action="delete-all">Delete all tasks</button>
       </div>
+      <p class="row-note">Clearing and deleting always ask for confirmation, and can be undone right after.</p>
     </section>
     <section class="panel">
       <h2>Shortcuts</h2>
@@ -847,10 +1192,10 @@ function renderSettings() {
         <li><span>Esc</span><strong>Close</strong></li>
       </ul>
     </section>
-    <p class="about muted">Cadence ${APP_VERSION}. Speech recognition is provided by your browser and may send audio to its vendor for processing.</p>`;
+    <p class="about muted">Cadence ${APP_VERSION}. Speech recognition is provided by your browser and may send audio to its vendor for processing. What you say is sent to the app’s server only to be understood, and task titles with their times only to deliver reminders.</p>`;
 }
 
-// ---------------------------------------------------------------- theme, notifications, install
+// ---------------------------------------------------------------- theme, install
 
 function applyTheme() {
   const t = state.settings.theme;
@@ -860,54 +1205,6 @@ function applyTheme() {
   meta.content = dark ? '#0f1115' : '#ffffff';
 }
 
-async function requestNotifications() {
-  if (typeof Notification === 'undefined') { toast('Notifications are not supported here'); return false; }
-  const p = await Notification.requestPermission();
-  if (p !== 'granted') { toast('Notification permission was not granted'); return false; }
-  return true;
-}
-
-async function notify(title, body) {
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-  try {
-    const reg = navigator.serviceWorker ? await navigator.serviceWorker.getRegistration() : null;
-    if (reg && reg.showNotification) await reg.showNotification(title, { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: title + body });
-    else new Notification(title, { body, icon: 'icons/icon-192.png' });
-  } catch (e) { console.warn('notify failed', e); }
-}
-
-function checkReminders() {
-  if (!state.settings.notifications) return;
-  const lead = state.settings.reminderLead;
-  const n = now();
-  let changed = false;
-  for (const task of openTasks()) {
-    if (!task.due || !task.time || task.notifiedAt) continue;
-    const [h, m] = task.time.split(':').map(Number);
-    const at = fromISODate(task.due);
-    at.setHours(h, m, 0, 0);
-    const diffMin = (at - n) / 60000;
-    if (diffMin <= lead && diffMin > -30) {
-      notify(task.title, diffMin > 0.5 ? `In ${Math.round(diffMin)} min · ${formatTime(task.time, state.settings.hour12)}` : `Now · ${formatTime(task.time, state.settings.hour12)}`);
-      task.notifiedAt = n.toISOString();
-      changed = true;
-    }
-  }
-  if (changed) saveTasks(state.tasks);
-}
-
-function downloadBackup() {
-  const blob = new Blob([exportData(state.tasks, state.settings)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `cadence-backup-${todayISO()}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-}
-
 // ---------------------------------------------------------------- events
 
 function bindEvents() {
@@ -915,7 +1212,10 @@ function bindEvents() {
   el('micBtn').addEventListener('click', () => (state.listening ? stopListening() : startListening()));
   el('captureMic').addEventListener('click', () => (state.listening ? stopListening() : startListening()));
   el('captureClose').addEventListener('click', closeCapture);
-  el('backdrop').addEventListener('click', () => { closeCapture(); closeTaskSheet(); });
+  el('backdrop').addEventListener('click', () => {
+    if (!el('confirmSheet').hidden) return;
+    closeCapture(); closeTaskSheet(); closeRemindSheet();
+  });
   el('typeBtn').addEventListener('click', () => openCapture({ focusInput: true }));
   el('undoBtn').addEventListener('click', undo);
 
@@ -924,7 +1224,7 @@ function bindEvents() {
     const v = el('typeInput').value;
     el('typeInput').value = '';
     el('transcript').textContent = v;
-    handleInput(v, 'text');
+    handleInput(v);
   });
 
   el('captureResult').addEventListener('click', (e) => {
@@ -948,18 +1248,16 @@ function bindEvents() {
     }
   });
 
-  // Search
   el('searchBtn').addEventListener('click', () => {
     const bar = el('searchBar');
     bar.hidden = !bar.hidden;
     if (!bar.hidden) { setView('list'); el('searchInput').focus(); }
     else { state.search = ''; el('searchInput').value = ''; render(); }
   });
-  el('searchInput').addEventListener('input', (e) => { state.search = e.target.value.trim(); if (state.view !== 'list') state.view = 'list'; render(); });
+  el('searchInput').addEventListener('input', (e) => { state.search = e.target.value.trim(); state.view = 'list'; render(); });
   el('searchClear').addEventListener('click', () => { el('searchBar').hidden = true; if (!state.search) return; state.search = ''; el('searchInput').value = ''; render(); });
 
-  // Main view delegation
-  el('view').addEventListener('click', (e) => {
+  el('view').addEventListener('click', async (e) => {
     const chip = e.target.closest('[data-filter]');
     if (chip) { state.listFilter = chip.dataset.filter; render(); return; }
     const day = e.target.closest('.day[data-date]');
@@ -983,28 +1281,23 @@ function bindEvents() {
         break;
       case 'edit': if (task) openTaskSheet(task); break;
       case 'toggle-completed': state.completedOpen = !state.completedOpen; render(); break;
-      case 'clear-completed': {
-        const n = completedTasks().length;
-        if (!n) { toast('No completed tasks'); break; }
-        commit(() => { state.tasks = openTasks(); });
-        toast(`Cleared ${n} completed`, { action: 'Undo', onAction: undo });
-        break;
-      }
+      case 'clear-completed': await applyCommand({ type: 'clearCompleted' }); break;
       case 'cal-prev': state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() - 1, 1); render(); break;
       case 'cal-next': state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() + 1, 1); render(); break;
       case 'cal-today': state.selectedDate = todayISO(); state.calMonth = new Date(now().getFullYear(), now().getMonth(), 1); render(); break;
-      case 'add-for-day': openTaskSheet({ title: '', due: state.selectedDate, time: null, priority: 'normal', repeat: null, durationMin: null, tags: [], notes: '', id: 'draft' }); break;
-      case 'export': downloadBackup(); break;
+      case 'add-for-day': openTaskSheet({ title: '', due: state.selectedDate, time: null, priority: 'normal', repeat: null, durationMin: null, tags: [], notes: '', remind: state.settings.remindByDefault, id: 'draft' }); break;
+      case 'export': downloadText(`cadence-backup-${todayISO()}.json`, exportData(state.tasks, state.settings), 'application/json'); break;
       case 'import': el('importFile').click(); break;
-      case 'delete-all':
-        if (state.tasks.length && window.confirm(`Delete all ${state.tasks.length} tasks? You can undo right after.`)) {
-          commit(() => { state.tasks = []; });
-          toast('Deleted all tasks', { action: 'Undo', onAction: undo, duration: 8000 });
-        }
+      case 'delete-all': await applyCommand({ type: 'deleteAll' }); break;
+      case 'push-on': enableReminders(); break;
+      case 'push-off': disableReminders(); break;
+      case 'push-test': {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          await reg.showNotification('Cadence', { body: 'Reminders are working.', icon: 'icons/icon-192.png' });
+        } catch { toast('Could not show a test notification.'); }
         break;
-      case 'test-notification':
-        requestNotifications().then((ok) => { if (ok) notify('Cadence', 'Reminders are working.'); });
-        break;
+      }
       case 'install':
         if (state.installPrompt) { state.installPrompt.prompt(); state.installPrompt.userChoice.then(() => { state.installPrompt = null; render(); }); }
         break;
@@ -1012,19 +1305,15 @@ function bindEvents() {
     }
   });
 
-  el('view').addEventListener('change', async (e) => {
+  el('view').addEventListener('change', (e) => {
     const input = e.target.closest('[data-setting]');
     if (input) {
       const key = input.dataset.setting;
       let value;
       if (input.type === 'checkbox') value = input.checked;
-      else if (input.type === 'radio') value = input.value;
       else value = input.value;
       if (key === 'weekStart' || key === 'reminderLead') value = Number(value);
-      if (key === 'notifications' && value) {
-        const ok = await requestNotifications();
-        if (!ok) { input.checked = false; return; }
-      }
+      if (key === 'dailyReminderTime' && !/^\d{2}:\d{2}$/.test(value)) return;
       updateSettings({ [key]: value });
       return;
     }
@@ -1036,17 +1325,15 @@ function bindEvents() {
           const existing = new Set(state.tasks.map((t) => t.id));
           const fresh = data.tasks.filter((t) => !existing.has(t.id));
           commit(() => { state.tasks.push(...fresh); });
-          if (data.settings) updateSettings({ ...DEFAULT_SETTINGS, ...data.settings });
-          toast(`Imported ${fresh.length} tasks`, { action: 'Undo', onAction: undo });
+          toast(`Restored ${fresh.length} tasks`, { action: 'Undo', onAction: undo });
         } catch (err) {
-          toast(`Import failed: ${err.message}`, { duration: 7000 });
+          toast(`Restore failed: ${err.message}`, { duration: 7000 });
         }
       });
       e.target.value = '';
     }
   });
 
-  // Swipe between months on the calendar
   let touchX = null;
   el('view').addEventListener('touchstart', (e) => { touchX = e.target.closest('#calGrid') ? e.touches[0].clientX : null; }, { passive: true });
   el('view').addEventListener('touchend', (e) => {
@@ -1058,18 +1345,25 @@ function bindEvents() {
     render();
   }, { passive: true });
 
-  // Task sheet
   el('taskForm').addEventListener('submit', (e) => { e.preventDefault(); saveTaskSheet(); });
   el('taskClose').addEventListener('click', closeTaskSheet);
-  el('taskDelete').addEventListener('click', () => {
+  el('taskDelete').addEventListener('click', async () => {
     const t = state.tasks.find((x) => x.id === state.editingId);
-    if (t) { deleteTask(t); toast(`Deleted "${t.title}"`, { action: 'Undo', onAction: undo }); }
+    if (!t) { closeTaskSheet(); return; }
+    const ok = await confirmAction({ title: `Delete "${t.title}"?`, message: 'You can undo this right after.', okLabel: 'Delete' });
+    if (!ok) return;
+    deleteTask(t);
+    toast(`Deleted "${t.title}"`, { action: 'Undo', onAction: undo });
     closeTaskSheet();
   });
   el('taskComplete').addEventListener('click', () => {
     const t = state.tasks.find((x) => x.id === state.editingId);
     if (t) { completeTask(t); toast(`Completed "${t.title}"`, { action: 'Undo', onAction: undo }); }
     closeTaskSheet();
+  });
+  el('taskCalendar').addEventListener('click', () => {
+    const t = state.tasks.find((x) => x.id === state.editingId);
+    if (t && t.due) downloadText(`${t.title.replace(/[^\w]+/g, '-').toLowerCase() || 'task'}.ics`, icsForTask(t), 'text/calendar');
   });
   el('taskSheet').addEventListener('click', (e) => {
     const q = e.target.closest('[data-quick]');
@@ -1079,10 +1373,15 @@ function bindEvents() {
     if (q.dataset.quick === 'none') el('tTime').value = '';
   });
 
-  // Keyboard shortcuts (desktop)
+  el('remindLater').addEventListener('click', () => { updateSettings({ remindPrompted: true }); closeRemindSheet(); });
+  el('remindOn').addEventListener('click', async () => { closeRemindSheet(); await enableReminders(); });
+
+  el('confirmCancel').addEventListener('click', () => closeConfirm(false));
+  el('confirmOk').addEventListener('click', () => closeConfirm(true));
+
   document.addEventListener('keydown', (e) => {
     const typing = /^(input|textarea|select)$/i.test(e.target.tagName);
-    if (e.key === 'Escape') { closeCapture(); closeTaskSheet(); el('searchBar').hidden = true; return; }
+    if (e.key === 'Escape') { if (!el('confirmSheet').hidden) closeConfirm(false); closeCapture(); closeTaskSheet(); closeRemindSheet(); el('searchBar').hidden = true; return; }
     if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === ' ') { e.preventDefault(); if (state.listening) stopListening(); else startListening(); }
     else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openCapture({ focusInput: true }); }
@@ -1093,7 +1392,7 @@ function bindEvents() {
 
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); state.installPrompt = e; if (state.view === 'settings') render(); });
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); checkReminders(); } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); checkRemindersLocally(); } });
 }
 
 // ---------------------------------------------------------------- init
@@ -1103,15 +1402,17 @@ function init() {
   bindEvents();
   render();
   renderMicState('Ready');
-  checkReminders();
-  setInterval(checkReminders, 30000);
+  checkRemindersLocally();
+  setInterval(checkRemindersLocally, 30000);
   setInterval(() => { if (state.view !== 'settings') render(); }, 5 * 60000);
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker registration failed', e));
+    navigator.serviceWorker.register('sw.js').then(() => restorePushState()).catch((e) => console.warn('Service worker registration failed', e));
+  } else {
+    state.push = 'unsupported';
   }
+  probeServer();
 
-  // Launch from a home screen shortcut straight into listening mode.
   const params = new URLSearchParams(location.search);
   if (params.get('action') === 'speak') {
     history.replaceState(null, '', location.pathname);
@@ -1121,6 +1422,4 @@ function init() {
 }
 
 init();
-
-// Expose a small debugging surface for the console.
 window.cadence = { state, parseInput, parseTask, handleInput };

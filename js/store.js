@@ -75,6 +75,7 @@ export function sanitizeTask(t) {
     notifiedAt: t.notifiedAt || null,
     source: t.source || 'text',
     order: typeof t.order === 'number' ? t.order : Date.now(),
+    remind: t.remind !== false,
   };
 }
 

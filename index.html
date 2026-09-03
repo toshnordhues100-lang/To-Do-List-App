@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="Cadence. A voice-first to-do list with calendar, checklist and insights.">
+  <meta name="description" content="Cadence. A voice-first to-do list with calendar, checklist, insights and reminders.">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
   <meta name="mobile-web-app-capable" content="yes">
@@ -25,16 +25,16 @@
       <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16M7 16v-5M12 16V6M17 16v-8"/></symbol>
       <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
       <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
-      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
       <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
       <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
       <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
       <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-4"/></symbol>
       <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></symbol>
-      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
       <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
       <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></symbol>
+      <symbol id="i-bell-off" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 9.5-4.9M18 11v5l1.5 2h-15"/><path d="M10 20a2 2 0 0 0 4 0M4 4l16 16"/></symbol>
     </defs>
   </svg>
 
@@ -53,7 +53,7 @@
 
     <div id="searchBar" class="searchbar" hidden>
       <input id="searchInput" type="search" placeholder="Search tasks, tags or notes" autocomplete="off" aria-label="Search tasks">
-      <button id="searchClear" class="btn-text" type="button">Done</button>
+      <button id="searchClear" class="btn text" type="button">Done</button>
     </div>
 
     <main id="view" class="view" aria-live="polite"></main>
@@ -96,11 +96,11 @@
     <details class="hints">
       <summary>What can I say</summary>
       <ul>
-        <li>"Call the dentist tomorrow at 3"</li>
+        <li>"Remind me tomorrow at 8 pm to wash the dishes"</li>
         <li>"Pay rent on the first of every month"</li>
         <li>"Team meeting every Monday at 10, tag work"</li>
         <li>"Urgent, send the invoice by Friday"</li>
-        <li>"Buy milk and then book a haircut on Saturday"</li>
+        <li>"Buy milk and also book a haircut on Saturday"</li>
         <li>"Complete buy milk", "Delete the dentist task"</li>
         <li>"Move gym to Friday", "Make dentist high priority"</li>
         <li>"What's on today", "What do I have tomorrow"</li>
@@ -130,6 +130,10 @@
         <button type="button" class="chip" data-quick="nextweek">Next week</button>
         <button type="button" class="chip" data-quick="none">No date</button>
       </div>
+      <label class="row in-sheet">
+        <div><span class="row-l">Remind me</span><span class="row-h" id="tRemindHint">A notification at the task's time, or at your daily reminder time when there is no time.</span></div>
+        <input type="checkbox" class="switch" id="tRemind" checked>
+      </label>
       <div class="field">
         <span>Priority</span>
         <div class="segmented" role="radiogroup" id="tPriority">
@@ -158,6 +162,7 @@
       <label class="field"><span>Notes</span><textarea id="tNotes" rows="3"></textarea></label>
       <div class="sheet-actions">
         <button type="button" id="taskDelete" class="btn danger-text">Delete</button>
+        <button type="button" id="taskCalendar" class="btn text small" hidden>Add to calendar</button>
         <div class="spacer"></div>
         <button type="button" id="taskComplete" class="btn secondary">Complete</button>
         <button type="submit" class="btn primary">Save</button>
@@ -165,11 +170,39 @@
     </form>
   </section>
 
+  <section id="remindSheet" class="sheet remind-sheet" hidden aria-label="Turn on reminders">
+    <div class="sheet-handle"></div>
+    <h2>Get reminded on your phone</h2>
+    <p id="remindText" class="muted">Cadence can notify you when a task is due, even when the app is closed and your phone is locked. Every task with a date gets a reminder unless you switch it off for that task.</p>
+    <ol id="remindSteps" class="steps" hidden>
+      <li>Tap the Share button in Safari.</li>
+      <li>Choose "Add to Home Screen".</li>
+      <li>Open Cadence from your home screen and turn reminders on in Settings.</li>
+    </ol>
+    <div class="sheet-actions">
+      <button type="button" id="remindLater" class="btn text">Not now</button>
+      <div class="spacer"></div>
+      <button type="button" id="remindOn" class="btn primary">Turn on reminders</button>
+    </div>
+  </section>
+
+  <section id="confirmSheet" class="sheet confirm-sheet" hidden role="alertdialog" aria-labelledby="confirmTitle">
+    <div class="sheet-handle"></div>
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <p id="confirmText" class="muted"></p>
+    <div class="sheet-actions">
+      <button type="button" id="confirmCancel" class="btn secondary">Cancel</button>
+      <div class="spacer"></div>
+      <button type="button" id="confirmOk" class="btn danger">Delete</button>
+    </div>
+  </section>
+
   <div id="toast" class="toast" hidden role="status">
     <span id="toastText"></span>
     <button id="toastAction" class="btn text" type="button" hidden>Undo</button>
   </div>
 
+  <script src="js/config.js"></script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>
