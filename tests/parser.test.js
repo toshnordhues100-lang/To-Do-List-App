@@ -199,3 +199,20 @@ test('parseTask keeps ordinary words intact', () => {
   assert.equal(parseTask('read the first chapter', NOW).title, 'Read the first chapter');
   assert.equal(parseTask('buy 3 apples', NOW).title, 'Buy 3 apples');
 });
+
+test('relativeOffset keeps exact seconds for "in N" phrases', async () => {
+  const { relativeOffset } = await import('../js/parser.js');
+  const base = new Date(2026, 8, 2, 23, 20, 40);
+  const at = (t) => relativeOffset(t, base);
+  assert.equal(at('remind me in 1 minute to clean').ms, 60000);
+  assert.equal(at('remind me in 1 minute to clean').at.getTime(), base.getTime() + 60000);
+  assert.equal(at('in a minute take out the trash').ms, 60000);
+  assert.equal(at('in 30 seconds check the oven').ms, 30000);
+  assert.equal(at('in ninety seconds stir the pot').ms, 90000);
+  assert.equal(at('call mom in 2 and a half hours').ms, 2.5 * 3600000);
+  assert.equal(at('in an hour and 20 minutes leave').ms, 80 * 60000);
+  assert.equal(at('in half an hour walk the dog').ms, 30 * 60000);
+  assert.equal(at('pay rent in 3 days'), null, 'days keep the calendar path');
+  assert.equal(at('in 2 seconds'), null, 'too short to be a reminder');
+  assert.equal(at('wash the car tomorrow at 8'), null);
+});

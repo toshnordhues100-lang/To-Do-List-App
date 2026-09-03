@@ -66,7 +66,7 @@ function numberWordsToDigits(text) {
     return parts.reduce((s, p) => s + (NUMBER_WORDS[p] ?? 0), 0);
   };
   const contexts = [
-    new RegExp(`\\b(in|for|every|within)\\s+(${numberWord})\\s+(minutes?|mins?|hours?|hrs?|days?|weeks?|months?|years?)\\b`, 'g'),
+    new RegExp(`\\b(in|for|every|within)\\s+(${numberWord})\\s+(seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|months?|years?)\\b`, 'g'),
     new RegExp(`\\b(at|around|by|until|till|before|after)\\s+(${numberWord})(?=\\s*(?:am|pm|o'clock|in the|tonight|tomorrow|today|:|$|\\s))`, 'g'),
     new RegExp(`\\b(${numberWord})\\s*(am|pm|o'clock)\\b`, 'g'),
     new RegExp(`\\b(half past|quarter past|quarter to|quarter till)\\s+(${numberWord})\\b`, 'g'),
@@ -587,4 +587,21 @@ export function findBestMatch(query, tasks, { threshold = 0.45 } = {}) {
     if (s > bestScore) { best = task; bestScore = s; }
   }
   return bestScore >= threshold ? { task: best, score: bestScore } : null;
+}
+
+// Exact offset for relative reminders: "in 30 seconds", "in a minute", "in 2 and a
+// half hours", "in an hour and 20 minutes". Returns { ms, at } or null. Unlike a
+// clock time, this keeps the seconds, so "in 1 minute" means 60 seconds from now.
+export function relativeOffset(text, now = new Date()) {
+  let t = numberWordsToDigits(normalize(text));
+  t = t.replace(/\bin (?:about |around |roughly |like )?half an? (hour|minute)\b/, 'in 0.5 $1');
+  t = t.replace(/\bin (\d+) and a half (hours?|minutes?)\b/, (m, n, u) => `in ${n}.5 ${u}`);
+  const m = t.match(/\bin (?:about |around |roughly |like )?(\d+(?:\.\d+)?)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)(?:\s+and\s+(?:(\d+)\s*(seconds?|secs?|minutes?|mins?)|(?:a\s+)?half))?\b/);
+  if (!m) return null;
+  const unitMs = (u) => (/^s/.test(u) ? 1000 : /^m/.test(u) ? 60000 : 3600000);
+  let ms = parseFloat(m[1]) * unitMs(m[2]);
+  if (m[3] && m[4]) ms += parseInt(m[3], 10) * unitMs(m[4]);
+  else if (/\band\s+(?:a\s+)?half\b/.test(m[0])) ms += unitMs(m[2]) / 2;
+  if (!(ms >= 5000) || ms > 366 * 86400000) return null;
+  return { ms: Math.round(ms), at: new Date(now.getTime() + Math.round(ms)) };
 }

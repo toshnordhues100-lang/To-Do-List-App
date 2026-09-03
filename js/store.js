@@ -76,6 +76,7 @@ export function sanitizeTask(t) {
     source: t.source || 'text',
     order: typeof t.order === 'number' ? t.order : Date.now(),
     remind: t.remind !== false,
+    remindAt: t.remindAt && !Number.isNaN(Date.parse(t.remindAt)) ? new Date(t.remindAt).toISOString() : null,
   };
 }
 
