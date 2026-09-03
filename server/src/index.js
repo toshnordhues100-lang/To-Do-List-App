@@ -75,6 +75,22 @@ async function handleParse(request, env) {
 
 function deviceKey(token) { return `dev:${token}`; }
 
+function deviceStatus(dev) {
+  const now = Date.now();
+  const upcoming = (dev.reminders || []).filter((r) => Date.parse(r.at) >= now - 30 * 60000).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  let host = null;
+  try { host = dev.subscription ? new URL(dev.subscription.endpoint).host : null; } catch { host = null; }
+  return {
+    subscribed: Boolean(dev.subscription),
+    pushService: host,
+    scheduled: upcoming.length,
+    next: upcoming[0] ? { title: upcoming[0].title, at: upcoming[0].at } : null,
+    lastDelivery: dev.lastDelivery || null,
+    lastTest: dev.lastTest || null,
+    updatedAt: dev.updatedAt || null,
+  };
+}
+
 async function handleDevice(request, env, token, sub) {
   if (!TOKEN_RE.test(token)) return json(env, { error: 'bad token' }, 400);
   const key = deviceKey(token);
@@ -83,6 +99,16 @@ async function handleDevice(request, env, token, sub) {
     return json(env, { ok: true });
   }
   const existing = (await env.KV.get(key, 'json')) || { reminders: [], sent: {} };
+  if (request.method === 'GET') return json(env, deviceStatus(existing));
+  if (sub === 'test') {
+    if (!existing.subscription) return json(env, { ok: false, error: 'This phone is not subscribed for reminders yet.' }, 400);
+    const keys = await vapid(env);
+    const res = await sendPush(existing.subscription, { title: 'Cadence', body: 'Reminders are working on this phone.', id: 'test' }, { subject: env.VAPID_SUBJECT || 'mailto:owner@example.com', keys });
+    existing.lastTest = { at: new Date().toISOString(), status: res.status, ok: res.ok };
+    if (res.gone) delete existing.subscription;
+    await env.KV.put(key, JSON.stringify(existing), { expirationTtl: 400 * 86400 });
+    return json(env, { ok: res.ok, status: res.status, gone: res.gone });
+  }
   const body = await readJson(request);
   if (!body) return json(env, { error: 'json body required' }, 400);
 
@@ -133,6 +159,7 @@ async function deliverDue(env, now = new Date()) {
         const res = await sendPush(dev.subscription, { title: r.title, body: r.body, id: r.id }, { subject, keys });
         dev.sent = dev.sent || {};
         dev.sent[`${r.id}@${r.at}`] = now.toISOString();
+        dev.lastDelivery = { at: now.toISOString(), title: r.title, status: res.status, ok: res.ok };
         changed = true;
         if (res.gone) { delete dev.subscription; break; }
         if (res.ok) sentCount += 1;
@@ -157,8 +184,8 @@ export default {
         return json(env, { publicKey: keys.publicKey });
       }
       if (path === '/api/parse' && request.method === 'POST') return handleParse(request, env);
-      const m = path.match(/^\/api\/devices\/([^/]+)(?:\/(reminders))?$/);
-      if (m && ['PUT', 'POST', 'DELETE'].includes(request.method)) return handleDevice(request, env, m[1], m[2]);
+      const m = path.match(/^\/api\/devices\/([^/]+)(?:\/(reminders|test))?$/);
+      if (m && ['GET', 'PUT', 'POST', 'DELETE'].includes(request.method)) return handleDevice(request, env, m[1], m[2]);
       if (path === '/api/deliver' && request.method === 'POST' && url.searchParams.get('key') && url.searchParams.get('key') === env.ADMIN_KEY) {
         return json(env, { sent: await deliverDue(env) });
       }
