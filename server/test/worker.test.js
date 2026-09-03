@@ -55,3 +55,17 @@ test('unknown routes 404 and OPTIONS answers CORS', async () => {
   assert.equal(pre.status, 204);
   assert.equal(pre.headers.get('Access-Control-Allow-Methods').includes('PUT'), true);
 });
+
+test('status and test endpoints report the push pipeline', async () => {
+  const env = { KV: fakeKV(), ALLOWED_ORIGIN: '*' };
+  const sub = { endpoint: 'https://web.push.apple.com/QW', keys: { p256dh: 'BNo', auth: 'x' } };
+  let res = await worker.fetch(new Request(`https://api/api/devices/${token}`), env);
+  assert.deepEqual(await res.json(), { subscribed: false, pushService: null, scheduled: 0, next: null, lastDelivery: null, lastTest: null, updatedAt: null });
+  res = await worker.fetch(new Request(`https://api/api/devices/${token}/test`, { method: 'POST', body: '{}' }), env);
+  assert.equal(res.status, 400);
+  await worker.fetch(new Request(`https://api/api/devices/${token}`, { method: 'PUT', body: JSON.stringify({ subscription: sub }) }), env);
+  res = await worker.fetch(new Request(`https://api/api/devices/${token}`), env);
+  const st = await res.json();
+  assert.equal(st.subscribed, true);
+  assert.equal(st.pushService, 'web.push.apple.com');
+});

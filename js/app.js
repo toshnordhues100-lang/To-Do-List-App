@@ -43,6 +43,8 @@ const state = {
   installPrompt: null,
   briefedOn: localStorage.getItem('cadence.briefedOn') || '',
   server: API ? 'unknown' : 'none',   // none | unknown | on | off
+  serverStatus: null,
+  lastTest: null,
   push: 'unknown',                    // unknown | on | off | unsupported | needs_install | denied
   syncTimer: null,
 };
@@ -593,7 +595,8 @@ async function enableReminders({ silent = false } = {}) {
     state.push = 'on';
     updateSettings({ pushEnabled: true, remindPrompted: true });
     await syncReminders();
-    if (!silent) toast('Reminders are on. You will be notified even when the app is closed.', { duration: 6000 });
+    if (!silent) toast('Reminders are on. Sending a test notification now.', { duration: 6000 });
+    testReminder({ quiet: true });
     return true;
   } catch (e) {
     state.push = 'off';
@@ -638,6 +641,32 @@ async function syncReminders() {
     });
     if (res.ok) { const d = await res.json(); if (d && d.subscribed === false) state.push = 'off'; }
   } catch { /* offline: next change retries */ }
+}
+
+// Ask the server to push a real notification to this phone right now.
+async function testReminder({ quiet = false } = {}) {
+  if (!API) return;
+  try {
+    const res = await fetch(`${API}/api/devices/${deviceToken()}/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const data = await res.json().catch(() => ({}));
+    state.lastTest = { at: new Date(), status: data.status, ok: data.ok, error: data.error };
+    if (data.ok) { if (!quiet) toast(`Test sent. Apple or Google answered ${data.status}. It should appear on your phone within a few seconds.`, { duration: 8000 }); }
+    else if (data.gone) { state.push = 'off'; updateSettings({ pushEnabled: false }); toast('This phone\'s subscription expired. Turn reminders on again.', { duration: 8000 }); }
+    else toast(data.error ? data.error : `The push service refused the message (status ${data.status}).`, { duration: 8000 });
+  } catch {
+    state.lastTest = { at: new Date(), error: 'Could not reach the server' };
+    toast('Could not reach the reminder server.', { duration: 6000 });
+  }
+  refreshServerStatus();
+}
+
+async function refreshServerStatus() {
+  if (!API) return;
+  try {
+    const res = await fetch(`${API}/api/devices/${deviceToken()}`, { cache: 'no-store' });
+    state.serverStatus = res.ok ? await res.json() : null;
+  } catch { state.serverStatus = null; }
+  if (state.view === 'settings') render();
 }
 
 async function restorePushState() {
@@ -892,6 +921,7 @@ function setView(view) {
   state.view = view;
   render();
   el('view').scrollTop = 0;
+  if (view === 'settings' && API) refreshServerStatus();
 }
 
 function render() {
@@ -1098,6 +1128,24 @@ function renderInsights() {
     </section>`;
 }
 
+function renderPushDiagnostics() {
+  const st = state.serverStatus;
+  const perm = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const fmtAt = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : `${formatDate(toISODate(d), now())} ${formatTime(toTimeString(d.getHours(), d.getMinutes()), state.settings.hour12)}`; };
+  const rows = [
+    ['Opened from home screen', standalone ? 'Yes' : 'No (needed on iPhone)'],
+    ['Notification permission', perm],
+    ['This phone subscribed', state.push === 'on' ? 'Yes' : 'No'],
+    ['Server knows this phone', st ? (st.subscribed ? `Yes, via ${st.pushService || 'push service'}` : 'No') : 'Not checked yet'],
+    ['Reminders scheduled on server', st ? String(st.scheduled) : '–'],
+    ['Next reminder', st && st.next ? `${st.next.title} · ${fmtAt(st.next.at)}` : '–'],
+    ['Last reminder sent', st && st.lastDelivery ? `${st.lastDelivery.title} · ${fmtAt(st.lastDelivery.at)} · push service answered ${st.lastDelivery.status}` : 'None yet'],
+    ['Last test', st && st.lastTest ? `${fmtAt(st.lastTest.at)} · push service answered ${st.lastTest.status}` : (state.lastTest && state.lastTest.error ? state.lastTest.error : 'None yet')],
+  ];
+  return `<ul class="facts diag">${rows.map(([k, v]) => `<li><span>${esc(k)}</span><strong>${esc(v)}</strong></li>`).join('')}</ul>`;
+}
+
 function renderSettings() {
   const s = state.settings;
   const sw = (key, label, hint = '') => `<label class="row"><div><span class="row-l">${label}</span>${hint ? `<span class="row-h">${hint}</span>` : ''}</div><input type="checkbox" class="switch" data-setting="${key}" ${s[key] ? 'checked' : ''}></label>`;
@@ -1130,8 +1178,10 @@ function renderSettings() {
       <h2>Reminders</h2>
       <div class="status-line"><div><span class="row-l">Phone notifications${pushPill}</span><span class="row-h">${pushHint}</span></div></div>
       <div class="btn-row">
-        ${state.push === 'on' ? '<button class="btn secondary small" data-action="push-off">Turn off reminders</button><button class="btn secondary small" data-action="push-test">Send a test</button>' : API ? '<button class="btn primary small" data-action="push-on">Turn on reminders</button>' : ''}
+        ${state.push === 'on' ? '<button class="btn primary small" data-action="push-test">Send a test notification</button><button class="btn secondary small" data-action="push-off">Turn off reminders</button>' : API ? '<button class="btn primary small" data-action="push-on">Turn on reminders</button>' : ''}
+        ${API ? '<button class="btn text small" data-action="push-status">Refresh status</button>' : ''}
       </div>
+      ${API ? renderPushDiagnostics() : ''}
       ${sw('remindByDefault', 'Remind me for every new task', 'Switch a single task’s reminder off when you edit it')}
       <label class="row"><div><span class="row-l">Daily reminder time</span><span class="row-h">For tasks that have a date but no time</span></div>
         <input type="time" data-setting="dailyReminderTime" value="${esc(s.dailyReminderTime)}"></label>
@@ -1291,13 +1341,8 @@ function bindEvents() {
       case 'delete-all': await applyCommand({ type: 'deleteAll' }); break;
       case 'push-on': enableReminders(); break;
       case 'push-off': disableReminders(); break;
-      case 'push-test': {
-        try {
-          const reg = await navigator.serviceWorker.ready;
-          await reg.showNotification('Cadence', { body: 'Reminders are working.', icon: 'icons/icon-192.png' });
-        } catch { toast('Could not show a test notification.'); }
-        break;
-      }
+      case 'push-test': await testReminder(); break;
+      case 'push-status': await refreshServerStatus(); toast('Status refreshed'); break;
       case 'install':
         if (state.installPrompt) { state.installPrompt.prompt(); state.installPrompt.userChoice.then(() => { state.installPrompt = null; render(); }); }
         break;

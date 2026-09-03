@@ -1,7 +1,7 @@
 // Service worker: precaches the app shell so Cadence opens instantly and works
 // offline, and shows push reminders sent by the Cadence API.
 // Bump CACHE_VERSION whenever files change so installed phones pick up the update.
-const CACHE_VERSION = 'cadence-v2';
+const CACHE_VERSION = 'cadence-v3';
 const ASSETS = [
   './',
   './index.html',
