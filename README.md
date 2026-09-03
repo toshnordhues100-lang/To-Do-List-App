@@ -1,104 +1,107 @@
 # Cadence
 
-A voice-first to-do app for your phone. Tap the microphone, say what you need to do, and it lands in your list with the right date, time, priority and tags. It has a checklist mode, a calendar mode, insights, and works offline once installed.
+A voice-first to-do app for your phone. Tap the microphone, say what you need to do, and it lands in your list with the right date, time and priority. Claude understands what you said. Reminders ring your phone even when the app is closed. There is a checklist view, a calendar view and insights.
 
-No accounts, no servers. Everything is stored on the device.
+Nobody who uses the app needs an account of any kind. Each phone keeps its own list.
 
-## Put it on your phone
+## How it is built
 
-Cadence is a Progressive Web App, so it installs from the browser without an app store.
+| Part | What it does | Where it runs |
+| --- | --- | --- |
+| The app (`index.html`, `js/`, `css/`) | Everything you see. Installable from the browser, works offline. | GitHub Pages |
+| The server (`server/`) | Sends what you said to Claude and turns it into tasks. Sends push reminders at the right time. | A free Cloudflare Worker |
 
-1. Publish the repository with GitHub Pages (see below) or host the files on any HTTPS site.
-2. Open the URL on your phone.
-3. Install it:
-   - **iPhone (Safari):** tap Share, then "Add to Home Screen".
-   - **Android (Chrome):** open the browser menu, then "Add to Home screen" or "Install app".
-4. Open Cadence from the home screen and allow microphone access the first time you tap the microphone.
+The server uses **Claude Haiku 4.5**, the least expensive model. One spoken command is about a tenth of a cent, so a thousand commands cost roughly one dollar. Each phone is capped at 400 commands a day.
 
-Voice input needs HTTPS. Chrome on Android and Safari on iPhone have the best speech recognition. Firefox on mobile does not support voice input, but typing still works.
+Without the server the app still works: it falls back to built-in understanding and shows reminders while it is open.
 
-### Publish with GitHub Pages
+## Set up once (about ten minutes)
 
-1. In the repository, open Settings, then Pages.
-2. Under "Build and deployment", set Source to "GitHub Actions".
-3. Merge to `main`. The workflow in `.github/workflows/deploy.yml` runs the tests and deploys the site.
-4. The app will be available at `https://<your-username>.github.io/<repository-name>/`.
+You need three secrets in the GitHub repository. Go to **Settings, Secrets and variables, Actions, New repository secret** and add:
+
+| Secret | Where to get it |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | https://console.anthropic.com, API Keys, Create Key. Add a few dollars of credit. |
+| `CLOUDFLARE_ACCOUNT_ID` | https://dash.cloudflare.com (free account). The account ID is on the right side of the Workers & Pages overview page. |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare dashboard, My Profile, API Tokens, Create Token, use the **Edit Cloudflare Workers** template. |
+
+Then push to `main` (or open the Actions tab and run "Test and deploy"). The workflow:
+
+1. runs the tests,
+2. deploys the server to Cloudflare and stores your Anthropic key there as a secret,
+3. writes the server address into the app and publishes the site.
+
+The app is served at `https://<your-username>.github.io/<repository-name>/`. In the repository, **Settings, Pages** must have Source set to "Deploy from a branch" with branch `gh-pages`, folder `/ (root)`. The repository must be public for GitHub Pages on a free account.
+
+## Put it on a phone
+
+1. Open the app link in Safari (iPhone) or Chrome (Android).
+2. iPhone: tap Share, then "Add to Home Screen". Android: browser menu, then "Add to Home screen" or "Install app".
+3. Open Cadence from the home screen. Allow the microphone when asked.
+4. Add your first task. Cadence asks to turn reminders on. Tap "Turn on reminders" and allow notifications.
+
+Reminders on iPhone only work from the home-screen version (an Apple rule), which is why step 2 matters.
 
 ## What you can say
 
-Add tasks in plain language. Dates, times, priority, tags, repeats and durations are picked out automatically.
-
 | Say | Result |
 | --- | --- |
-| "Call the dentist tomorrow at 3" | Task due tomorrow at 3:00 PM |
-| "Pay rent on the first of every month" | Monthly task, due on the 1st |
+| "Remind me tomorrow at 8 pm to wash the dishes" | Task tomorrow at 8:00 PM with a reminder at 8:00 PM |
+| "Add wash the car at 8pm tmr night and remind me at 8" | One task, "Wash the car", tomorrow at 8:00 PM |
+| "Pay rent on the first of every month" | Monthly task |
 | "Team meeting every Monday at 10, tag work" | Weekly task tagged `work` |
 | "Urgent, send the invoice by Friday" | High priority, due Friday |
-| "Deep work block at 2 pm for 2 hours" | Timed task with a 2 hour duration |
-| "In 20 minutes check the oven" | Task due today at the right time |
-| "Buy milk and then call the bank and also book a haircut on Saturday" | Three separate tasks |
-| "Call the landlord, note ask about the deposit" | Task with a note attached |
+| "Buy milk and also book a haircut on Saturday" | Two tasks |
+| "Complete buy milk", "Delete the dentist task" | Marks or removes the matching task |
+| "Move gym to Friday", "Push report by 2 days" | Reschedules |
+| "What's on today", "What do I have tomorrow" | Reads your schedule aloud |
+| "Show calendar", "Show list", "Undo", "Clear completed" | App commands |
 
-Commands:
+## Reminders
 
-| Say | Result |
-| --- | --- |
-| "Complete buy milk", "Check off the dentist", "Buy milk is done" | Marks the closest matching task complete |
-| "Delete the gym task" | Removes it |
-| "Move gym to Friday", "Postpone dentist until next week at 2 pm", "Push report by 2 days" | Reschedules |
-| "Make dentist high priority" | Changes priority |
-| "Rename gym to morning run" | Renames |
-| "What's on today", "What do I have tomorrow", "What is overdue", "Read my tasks for this week" | Reads your schedule aloud |
-| "Show calendar", "Show list", "Show insights", "Show settings" | Switches view |
-| "Search groceries" | Filters the list |
-| "Undo" | Reverts the last change |
-| "Clear completed" | Removes finished tasks |
-| "Switch to dark mode" | Changes theme |
-| "Stop" | Ends hands-free listening |
+- Every task with a date gets a reminder unless you switch "Remind me" off for that task.
+- A task with a time rings at that time (or a few minutes before, your choice).
+- A task with only a date rings at your daily reminder time, 9:00 AM by default.
+- Reminders arrive with the app closed and the phone locked. A phone that is powered off receives them when it turns back on.
+- Any task can also be added to your calendar app with the "Add to calendar" button when editing it.
 
-## Features
+## Everything else
 
-- **Voice capture** with live transcript, spoken confirmations, and an optional hands-free mode that keeps listening until you say "stop".
-- **Typing** works everywhere voice does, with the same natural-language parsing.
-- **List mode** grouped by Overdue, Today, Tomorrow, Next 7 days, Later and No date, with filter chips for priority and tags.
-- **Calendar mode** with a month grid, per-day markers, a day agenda with planned time, and swipe between months. While a day is selected, anything you add without a date goes onto that day.
-- **Insights**: open, due today, overdue, completed this week, day streak, 30-day completion rate, a 14-day completion chart, tags breakdown and your most productive weekday.
-- **Repeating tasks**: daily, weekdays, every other day, weekly, every two weeks, monthly, yearly. Completing one schedules the next.
-- **Reminders** for timed tasks through system notifications, with a configurable lead time.
-- **Daily briefing** that reads today's tasks aloud the first time you tap the microphone each day.
-- **Review before saving** mode if you prefer to confirm what was heard.
-- **Undo and redo** for every change.
-- **Search**, task notes, durations, priorities, tags.
-- **Light, dark and system themes.**
-- **Backup and restore** as a JSON file.
-- **Offline support** and a home-screen shortcut that opens straight into listening.
-- Keyboard shortcuts on desktop: Space to listen, N to type, / to search, 1 to 4 to switch views, Z to undo.
+- Checklist grouped by Overdue, Today, Tomorrow, Next 7 days, Later, No date, with filters.
+- Month calendar with a day agenda. With a day selected, anything you add without a date goes on that day.
+- Insights: open, due today, overdue, done this week, streak, completion rate, 14-day chart, tags.
+- Repeating tasks, notes, durations, priorities, tags, search.
+- Spoken confirmations, hands-free mode, daily briefing.
+- Undo and redo. Clearing and deleting always ask for confirmation.
+- Light, dark and system themes. Backup and restore as a file.
 
 ## Run locally
 
 ```bash
-npm test          # parser tests
-npm start         # serves the app at http://localhost:8080
+npm test                 # app parser tests
+npm start                # serves the app at http://localhost:8080
+cd server && npm ci && npm test   # server tests
 ```
-
-Any static file server works. The app uses ES modules, so it must be served over HTTP rather than opened as a file.
 
 ## Project layout
 
 ```
 index.html               App shell
 css/styles.css           Styles, light and dark themes
-js/app.js                UI, views, voice flow, reminders
-js/parser.js             Natural-language parsing and command recognition
+js/app.js                Views, voice flow, reminders, server calls
+js/parser.js             Built-in natural-language parsing (fallback)
 js/dates.js              Date helpers
-js/store.js              localStorage persistence, recurrence, backup
+js/store.js              Local persistence, recurrence, backup
 js/voice.js              SpeechRecognition and SpeechSynthesis wrapper
-sw.js                    Service worker for offline use
-manifest.webmanifest     PWA manifest
-icons/                   App icons (regenerate with tools/make-icons.py)
-tests/parser.test.js     Parser tests
+js/config.js             Server address (filled in by the deploy workflow)
+sw.js                    Service worker: offline shell and push notifications
+server/src/index.js      Cloudflare Worker: routes and the reminder cron
+server/src/parse.js      Claude prompt and response validation
+server/src/push.js       Web Push encryption and VAPID
+artifact/                An alternative build that runs inside claude.ai
+.github/workflows        Test, deploy the server, publish the site
 ```
 
 ## Privacy
 
-Speech recognition is provided by the phone's browser. On most devices audio is processed by the browser vendor's speech service. Task data never leaves the device unless you export it.
+Speech recognition is provided by the phone's browser. What you say is sent to the Cadence server only to be understood by Claude and is not stored. For reminders, the server keeps each phone's push subscription and the titles and times of upcoming tasks, under a random device id. Nothing else leaves the phone.

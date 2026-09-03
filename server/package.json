@@ -1,0 +1,19 @@
+{
+  "name": "cadence-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker behind Cadence: Claude understanding and push reminders.",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.123.0"
+  },
+  "devDependencies": {
+    "http_ece": "^1.2.1",
+    "wrangler": "^4.128.0"
+  }
+}

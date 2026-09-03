@@ -1,0 +1,3195 @@
+<title>Cadence</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #eef0f3;
+  --text: #15181d;
+  --text-2: #5b6270;
+  --text-3: #8b919c;
+  --line: #e3e6ea;
+  --accent: #1f4ed8;
+  --accent-soft: #e6ecfb;
+  --accent-text: #ffffff;
+  --high: #c62828;
+  --high-soft: #fbe9e9;
+  --low: #9aa0aa;
+  --done: #2e7d4f;
+  --shadow: 0 10px 30px rgba(20, 24, 33, 0.14);
+  --radius: 14px;
+  --tab-h: 64px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f1115;
+  --surface: #171a20;
+  --surface-2: #20242c;
+  --text: #eceef2;
+  --text-2: #a4aab5;
+  --text-3: #6f7681;
+  --line: #262b34;
+  --accent: #6d8ff2;
+  --accent-soft: #1d2740;
+  --accent-text: #0f1115;
+  --high: #ef6b6b;
+  --high-soft: #3a1e1e;
+  --low: #6f7681;
+  --done: #5bbf83;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+h1, h2, h3, p { margin: 0; }
+ul { list-style: none; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+.muted { color: var(--text-2); }
+
+/* ---------- layout ---------- */
+.app { display: flex; flex-direction: column; height: 100%; max-width: 720px; margin: 0 auto; }
+.topbar {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+  padding: calc(14px + var(--safe-t)) 20px 12px;
+}
+.topbar h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.subtitle { color: var(--text-2); font-size: 14px; margin-top: 2px; min-height: 20px; }
+.topbar-actions { display: flex; gap: 2px; }
+.icon-btn {
+  width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 12px; color: var(--text-2);
+}
+.icon-btn:hover, .icon-btn.active { background: var(--surface-2); color: var(--text); }
+.icon-btn.active { color: var(--accent); }
+
+.searchbar { display: flex; gap: 8px; padding: 0 20px 10px; }
+.searchbar input {
+  flex: 1; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); outline: none;
+}
+.searchbar input:focus { border-color: var(--accent); }
+
+.view { flex: 1; overflow-y: auto; padding: 4px 20px calc(var(--tab-h) + var(--safe-b) + 24px); -webkit-overflow-scrolling: touch; }
+
+/* ---------- tab bar ---------- */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: grid; grid-template-columns: 1fr 1fr 88px 1fr 1fr; align-items: end;
+  height: calc(var(--tab-h) + var(--safe-b)); padding-bottom: var(--safe-b);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: saturate(180%) blur(14px); -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-top: 1px solid var(--line);
+  max-width: 720px; margin: 0 auto;
+}
+.tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: var(--tab-h); color: var(--text-3); font-size: 11px; font-weight: 500; letter-spacing: 0.01em; }
+.tab svg { width: 24px; height: 24px; }
+.tab.active { color: var(--accent); }
+.mic-slot { position: relative; height: var(--tab-h); display: flex; justify-content: center; }
+.mic {
+  position: absolute; top: -22px; width: 66px; height: 66px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-text); display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 45%, transparent);
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+.mic:active { transform: scale(0.94); }
+.mic svg { width: 28px; height: 28px; stroke-width: 2; }
+.mic .stop-icon { display: none; }
+.mic.active { background: var(--high); }
+.mic.active .mic-icon { display: none; }
+.mic.active .stop-icon { display: block; }
+.mic.active::before {
+  content: ""; position: absolute; inset: -8px; border-radius: 50%; border: 2px solid var(--high);
+  animation: pulse 1.6s ease-out infinite; opacity: 0.7;
+}
+@keyframes pulse { 0% { transform: scale(0.85); opacity: 0.8; } 100% { transform: scale(1.35); opacity: 0; } }
+
+/* ---------- chips ---------- */
+.chips { display: flex; gap: 8px; overflow-x: auto; padding: 6px 0 14px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: 0 0 auto; padding: 7px 13px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface);
+  font-size: 13.5px; font-weight: 500; color: var(--text-2); white-space: nowrap;
+}
+.chip.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+/* ---------- task groups ---------- */
+.group { margin-bottom: 22px; }
+.group-title {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin: 0 0 8px 4px;
+}
+.count { font-weight: 500; color: var(--text-3); letter-spacing: 0; }
+.chev { width: 16px; height: 16px; margin-left: auto; transition: transform 0.2s; }
+.chev.open { transform: rotate(90deg); }
+.tasks { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.task { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px 12px 12px; position: relative; border-bottom: 1px solid var(--line); }
+.task:last-child { border-bottom: 0; }
+.task::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: transparent; }
+.task.prio-high::before { background: var(--high); }
+.task.prio-low .task-title { color: var(--text-2); }
+.check {
+  flex: 0 0 auto; width: 24px; height: 24px; margin-top: 1px; border-radius: 50%; border: 1.6px solid var(--text-3);
+  display: flex; align-items: center; justify-content: center; color: transparent; transition: all 0.15s;
+}
+.check svg { width: 14px; height: 14px; stroke-width: 2.6; }
+.task.prio-high .check { border-color: var(--high); }
+.check:hover { border-color: var(--accent); color: var(--accent); }
+.task.done .check { background: var(--done); border-color: var(--done); color: #fff; }
+.task-body { flex: 1; min-width: 0; cursor: pointer; }
+.task-title { font-size: 16px; font-weight: 500; overflow-wrap: anywhere; }
+.task.done .task-title { text-decoration: line-through; color: var(--text-3); font-weight: 400; }
+.task-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin-top: 3px; font-size: 13px; color: var(--text-2); }
+.task-meta .sep { width: 3px; height: 3px; border-radius: 50%; background: var(--text-3); margin: 0 7px; }
+.task-meta .overdue { color: var(--high); font-weight: 500; }
+.task-meta .tag { color: var(--accent); font-weight: 500; }
+.task-meta .with-icon { display: inline-flex; align-items: center; gap: 4px; }
+.task-meta .with-icon svg { width: 13px; height: 13px; }
+.completed-group .btn.small { margin-top: 8px; }
+.empty { text-align: center; padding: 60px 20px; }
+.empty-title { font-weight: 600; font-size: 17px; margin-bottom: 6px; }
+
+/* ---------- calendar ---------- */
+.cal { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 10px 12px; margin-top: 6px; }
+.cal-nav { display: flex; align-items: center; gap: 4px; padding: 2px 4px 8px; }
+.cal-nav h2 { flex: 1; text-align: center; font-size: 17px; font-weight: 600; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dow { text-align: center; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); padding: 4px 0 6px; }
+.day {
+  position: relative; aspect-ratio: 1 / 1; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-size: 15px; color: var(--text);
+}
+.day.outside { color: var(--text-3); opacity: 0.6; }
+.day.past:not(.today) .num { color: var(--text-2); }
+.day.today .num { color: var(--accent); font-weight: 700; }
+.day.selected { background: var(--text); color: var(--bg); }
+.day.selected .num { color: inherit; }
+.day .badge { position: absolute; top: 4px; right: 5px; font-size: 9.5px; font-weight: 600; color: var(--text-3); }
+.day.selected .badge { color: var(--bg); opacity: 0.7; }
+.dots { display: flex; gap: 3px; height: 5px; }
+.dots i { width: 5px; height: 5px; border-radius: 50%; display: block; }
+.dot-open { background: var(--accent); }
+.dot-high { background: var(--high); }
+.dot-done { background: var(--done); }
+.day.selected .dots i { background: var(--bg); }
+.agenda { margin-top: 18px; }
+.agenda-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 4px 10px; }
+.agenda-head h2 { font-size: 17px; font-weight: 600; }
+.agenda-head .muted { font-size: 13px; }
+.agenda-empty { padding: 14px 4px; font-size: 14px; }
+.done-list { margin-top: 10px; opacity: 0.8; }
+.agenda .btn.block { margin-top: 12px; }
+
+/* ---------- insights ---------- */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 14px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 12px; display: flex; flex-direction: column; gap: 2px; }
+.stat-n { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.stat-l { font-size: 12px; color: var(--text-2); }
+.stat.warn .stat-n { color: var(--high); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+.panel h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin-bottom: 12px; }
+.bars { display: flex; align-items: flex-end; gap: 6px; height: 120px; }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 6px; }
+.bar { width: 100%; max-width: 22px; background: var(--accent); border-radius: 4px 4px 2px 2px; min-height: 3px; opacity: 0.9; transition: height 0.3s; }
+.bar.zero { background: var(--line); }
+.bar-l { font-size: 10px; color: var(--text-3); }
+.hbar { display: grid; grid-template-columns: 84px 1fr 28px; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 14px; }
+.hbar-l { color: var(--accent); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-track { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.hbar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+.hbar-n { text-align: right; color: var(--text-2); }
+.facts li { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.facts li:last-child { border-bottom: 0; }
+.facts span { color: var(--text-2); }
+.facts strong { font-weight: 600; }
+
+/* ---------- settings ---------- */
+.row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.row:last-of-type { border-bottom: 0; }
+.row-l { display: block; font-size: 15px; font-weight: 500; }
+.row-h { display: block; font-size: 13px; color: var(--text-2); margin-top: 2px; }
+.row-note { font-size: 13.5px; color: var(--text-2); padding: 6px 0 4px; }
+.row select, .field select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); max-width: 55%; }
+.switch { appearance: none; -webkit-appearance: none; width: 46px; height: 28px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); position: relative; flex: 0 0 auto; transition: background 0.2s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); transition: transform 0.2s; }
+.switch:checked { background: var(--accent); border-color: var(--accent); }
+.switch:checked::after { transform: translateX(18px); }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.about { font-size: 12.5px; text-align: center; padding: 8px 12px 20px; }
+
+.segmented { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 2px; }
+.segmented label { position: relative; }
+.segmented input { position: absolute; opacity: 0; inset: 0; }
+.segmented span { display: block; padding: 7px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--text-2); }
+.segmented input:checked + span { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+.segmented.small span { padding: 5px 10px; font-size: 13px; }
+.segmented input:focus-visible + span { outline: 2px solid var(--accent); }
+
+/* ---------- buttons ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; padding: 11px 18px; border-radius: 12px; font-weight: 600; font-size: 15px; white-space: nowrap; }
+.btn.primary { background: var(--accent); color: var(--accent-text); }
+.btn.secondary { background: var(--surface-2); color: var(--text); }
+.btn.text { color: var(--accent); padding: 8px 10px; }
+.btn.danger-text { color: var(--high); padding: 8px 10px; }
+.btn.small { padding: 8px 12px; font-size: 13.5px; }
+.btn.block { width: 100%; }
+.btn:active { opacity: 0.85; }
+
+/* ---------- sheets ---------- */
+.backdrop { position: fixed; inset: 0; background: rgba(10, 12, 16, 0.4); z-index: 30; }
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; max-width: 720px; margin: 0 auto;
+  background: var(--surface); border-radius: 20px 20px 0 0; padding: 8px 20px calc(16px + var(--safe-b));
+  box-shadow: var(--shadow); max-height: 88vh; overflow-y: auto; animation: rise 0.22s ease-out;
+}
+@keyframes rise { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes drop { from { transform: translate(-50%, -12px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+.sheet-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 4px auto 14px; }
+.capture-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.capture-status { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
+.dot.live { background: var(--high); animation: blink 1.2s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: 0.3; } }
+.capture-context { font-size: 12.5px; color: var(--accent); font-weight: 500; }
+.transcript { font-size: 22px; font-weight: 500; line-height: 1.3; min-height: 58px; letter-spacing: -0.01em; }
+.transcript.interim { color: var(--text-2); }
+.capture-result { margin: 12px 0 4px; border-top: 1px solid var(--line); padding-top: 12px; }
+.result-heading { font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin-bottom: 8px; }
+.result-card { display: flex; gap: 12px; align-items: flex-start; padding: 8px 0; }
+.result-label { flex: 0 0 auto; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--done); background: color-mix(in srgb, var(--done) 12%, transparent); padding: 3px 8px; border-radius: 6px; margin-top: 2px; }
+.result-title { font-weight: 600; }
+.result-meta { font-size: 13.5px; color: var(--text-2); }
+.result-list li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.result-list li:last-child { border-bottom: 0; }
+.result-list .muted { font-size: 13px; text-align: right; flex: 0 0 auto; }
+.pending-actions { display: flex; gap: 8px; margin-top: 10px; }
+.type-form { display: flex; gap: 8px; margin-top: 14px; }
+.type-form input { flex: 1; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); outline: none; font-size: 16px; }
+.type-form input:focus { border-color: var(--accent); background: var(--surface); }
+.capture-actions { display: flex; justify-content: space-between; margin-top: 12px; }
+.hints { margin-top: 10px; font-size: 14px; color: var(--text-2); }
+.hints summary { cursor: pointer; font-weight: 500; color: var(--text-3); padding: 6px 0; list-style: none; }
+.hints summary::-webkit-details-marker { display: none; }
+.hints ul { padding: 4px 0 4px 2px; }
+.hints li { padding: 3px 0; }
+
+.sheet-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.sheet-title-row h2 { font-size: 18px; font-weight: 700; }
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.field > span { font-size: 12.5px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.field input, .field textarea, .field select { padding: 11px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); outline: none; font-size: 16px; width: 100%; max-width: none; }
+.field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); background: var(--surface); }
+.field textarea { resize: vertical; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.quick-dates { display: flex; gap: 8px; margin: -6px 0 14px; flex-wrap: wrap; }
+.sheet-actions { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.spacer { flex: 1; }
+
+/* ---------- toast ---------- */
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); top: calc(var(--safe-t) + 12px); z-index: 50;
+  display: flex; align-items: center; gap: 10px; background: var(--text); color: var(--bg);
+  padding: 10px 12px 10px 16px; border-radius: 12px; font-size: 14.5px; max-width: calc(100% - 40px); box-shadow: var(--shadow);
+  animation: drop 0.2s ease-out;
+}
+.toast .btn.text { color: var(--bg); font-weight: 700; padding: 4px 6px; }
+
+@media (min-width: 720px) {
+  .stats { grid-template-columns: repeat(6, 1fr); }
+  .task-title { font-size: 15.5px; }
+}
+@media (hover: hover) {
+  .task-body:hover .task-title { color: var(--accent); }
+  .day:hover:not(.selected) { background: var(--surface-2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* Artifact edition overrides: typeface, warmer neutrals, extra sheets. */
+:root {
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --surface-2: #ecebe6;
+  --text: #17181c;
+  --text-2: #5c6169;
+  --text-3: #8a8f96;
+  --line: #e2e1dc;
+  --accent: #1f4bd0;
+  --accent-soft: #e5eafb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1114;
+    --surface: #171a1f;
+    --surface-2: #20242b;
+    --text: #eceef1;
+    --text-2: #a3a8b1;
+    --text-3: #6e747d;
+    --line: #262b33;
+    --accent: #7d9cf5;
+    --accent-soft: #1d2740;
+    --accent-text: #0f1114;
+    --high: #ef6b6b;
+    --high-soft: #3a1e1e;
+    --low: #6e747d;
+    --done: #5bbf83;
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1114;
+  --surface: #171a1f;
+  --surface-2: #20242b;
+  --text: #eceef1;
+  --text-2: #a3a8b1;
+  --text-3: #6e747d;
+  --line: #262b33;
+  --accent: #7d9cf5;
+  --accent-soft: #1d2740;
+}
+body {
+  font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 15.5px;
+}
+.topbar h1 { letter-spacing: -0.025em; }
+.task-meta, .stat-n, .day .num, .result-meta, .agenda-head .muted, .facts strong { font-variant-numeric: tabular-nums; }
+
+/* status pills used in settings */
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; background: var(--surface-2); color: var(--text-2); }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); }
+.pill.on { background: color-mix(in srgb, var(--done) 14%, transparent); color: var(--done); }
+.pill.on::before { background: var(--done); }
+.pill.warn { background: color-mix(in srgb, var(--high) 12%, transparent); color: var(--high); }
+.pill.warn::before { background: var(--high); }
+.row-l .pill { margin-left: 8px; vertical-align: middle; }
+.status-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.status-line:last-of-type { border-bottom: 0; }
+.status-line .row-h { display: block; font-size: 13px; color: var(--text-2); margin-top: 2px; }
+
+/* profile and confirm sheets */
+.profile-sheet h2, .confirm-sheet h2 { font-size: 20px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.01em; }
+.profile-sheet > .muted, .confirm-sheet > .muted { font-size: 14.5px; margin-bottom: 14px; }
+.profile-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.profile-list:empty { display: none; }
+.profile-item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); font-size: 15.5px; font-weight: 500; }
+.profile-item svg { width: 20px; height: 20px; color: var(--text-2); }
+.profile-item .muted { margin-left: auto; font-size: 13px; font-weight: 400; }
+.form-error { color: var(--high); font-size: 14px; margin: -6px 0 10px; }
+.btn.danger { background: var(--high); color: #fff; }
+.sheet.locked { pointer-events: auto; }
+.backdrop.hard { background: color-mix(in srgb, var(--bg) 88%, transparent); }
+
+/* thinking state */
+.capture-status .dot.thinking { background: var(--accent); animation: blink 0.8s ease-in-out infinite; }
+.transcript.thinking { color: var(--text-3); }
+.smart-note { font-size: 12.5px; color: var(--text-3); margin-top: 8px; }
+.cal-link { color: var(--accent); font-weight: 500; text-decoration: none; }
+
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 0 0-7 0v6A3.5 3.5 0 0 0 12 15z"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5M8.5 21.5h7"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 7h2M4 12h2M4 17h2M10 7h10M10 12h10M10 17h10"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16M7 16v-5M12 16V6M17 16v-8"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-4"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+  </defs>
+</svg>
+
+<div id="app" class="app">
+  <header class="topbar">
+    <div class="topbar-text">
+      <h1 id="viewTitle">Tasks</h1>
+      <p id="viewSubtitle" class="subtitle"></p>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="undoBtn" aria-label="Undo" title="Undo" hidden><svg><use href="#i-undo"/></svg></button>
+      <button class="icon-btn" id="searchBtn" aria-label="Search" title="Search"><svg><use href="#i-search"/></svg></button>
+      <button class="icon-btn" id="typeBtn" aria-label="Type a task" title="Type a task"><svg><use href="#i-keyboard"/></svg></button>
+    </div>
+  </header>
+
+  <div id="searchBar" class="searchbar" hidden>
+    <input id="searchInput" type="search" placeholder="Search tasks, tags or notes" autocomplete="off" aria-label="Search tasks">
+    <button id="searchClear" class="btn text" type="button">Done</button>
+  </div>
+
+  <main id="view" class="view" aria-live="polite"></main>
+
+  <nav class="tabbar" aria-label="Main">
+    <button class="tab" data-view="list"><svg><use href="#i-list"/></svg><span>List</span></button>
+    <button class="tab" data-view="calendar"><svg><use href="#i-calendar"/></svg><span>Calendar</span></button>
+    <div class="mic-slot">
+      <button id="micBtn" class="mic" aria-label="Speak a task" aria-pressed="false">
+        <svg class="mic-icon"><use href="#i-mic"/></svg>
+        <svg class="stop-icon"><use href="#i-stop"/></svg>
+      </button>
+    </div>
+    <button class="tab" data-view="insights"><svg><use href="#i-chart"/></svg><span>Insights</span></button>
+    <button class="tab" data-view="settings"><svg><use href="#i-settings"/></svg><span>Settings</span></button>
+  </nav>
+</div>
+
+<div id="backdrop" class="backdrop" hidden></div>
+
+<section id="captureSheet" class="sheet capture" hidden aria-label="Add a task">
+  <div class="sheet-handle"></div>
+  <div class="capture-head">
+    <div class="capture-status">
+      <span id="captureDot" class="dot"></span>
+      <span id="captureStatus">Ready</span>
+    </div>
+    <span id="captureContext" class="capture-context"></span>
+  </div>
+  <p id="transcript" class="transcript">Tap the microphone and say a task.</p>
+  <div id="captureResult" class="capture-result" hidden></div>
+  <form id="typeForm" class="type-form" autocomplete="off">
+    <input id="typeInput" type="text" placeholder="Type a task or a command" aria-label="Type a task" enterkeyhint="done">
+    <button type="submit" class="btn primary">Add</button>
+  </form>
+  <div class="capture-actions">
+    <button id="captureMic" class="btn secondary" type="button">Start listening</button>
+    <button id="captureClose" class="btn text" type="button">Close</button>
+  </div>
+  <details class="hints">
+    <summary>What can I say</summary>
+    <ul>
+      <li>"Remind me tomorrow at 8 pm to wash the dishes"</li>
+      <li>"Pay rent on the first of every month"</li>
+      <li>"Team meeting every Monday at 10, tag work"</li>
+      <li>"Urgent, send the invoice by Friday"</li>
+      <li>"Buy milk and also book a haircut on Saturday"</li>
+      <li>"Complete buy milk", "Delete the dentist task"</li>
+      <li>"Move gym to Friday", "Make dentist high priority"</li>
+      <li>"What's on today", "What do I have tomorrow"</li>
+      <li>"Show calendar", "Show list", "Undo"</li>
+    </ul>
+  </details>
+</section>
+
+<section id="taskSheet" class="sheet task-sheet" hidden aria-label="Edit task">
+  <div class="sheet-handle"></div>
+  <form id="taskForm" autocomplete="off">
+    <div class="sheet-title-row">
+      <h2 id="taskSheetTitle">Edit task</h2>
+      <button type="button" class="icon-btn" id="taskClose" aria-label="Close"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <label class="field">
+      <span>Title</span>
+      <input id="tTitle" type="text" required maxlength="200">
+    </label>
+    <div class="field-row">
+      <label class="field"><span>Date</span><input id="tDate" type="date"></label>
+      <label class="field"><span>Time</span><input id="tTime" type="time"></label>
+    </div>
+    <div class="quick-dates">
+      <button type="button" class="chip" data-quick="today">Today</button>
+      <button type="button" class="chip" data-quick="tomorrow">Tomorrow</button>
+      <button type="button" class="chip" data-quick="nextweek">Next week</button>
+      <button type="button" class="chip" data-quick="none">No date</button>
+    </div>
+    <div class="field">
+      <span>Priority</span>
+      <div class="segmented" role="radiogroup" id="tPriority">
+        <label><input type="radio" name="priority" value="low"><span>Low</span></label>
+        <label><input type="radio" name="priority" value="normal" checked><span>Normal</span></label>
+        <label><input type="radio" name="priority" value="high"><span>High</span></label>
+      </div>
+    </div>
+    <div class="field-row">
+      <label class="field">
+        <span>Repeat</span>
+        <select id="tRepeat">
+          <option value="">Never</option>
+          <option value="daily">Daily</option>
+          <option value="weekdays">Weekdays</option>
+          <option value="every2days">Every other day</option>
+          <option value="weekly">Weekly</option>
+          <option value="biweekly">Every two weeks</option>
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+        </select>
+      </label>
+      <label class="field"><span>Duration (min)</span><input id="tDuration" type="number" min="0" step="5" inputmode="numeric"></label>
+    </div>
+    <label class="field"><span>Tags</span><input id="tTags" type="text" placeholder="work, home"></label>
+    <label class="field"><span>Notes</span><textarea id="tNotes" rows="3"></textarea></label>
+    <p id="taskCalendarNote" class="row-note" hidden></p>
+    <div class="sheet-actions">
+      <button type="button" id="taskDelete" class="btn danger-text">Delete</button>
+      <div class="spacer"></div>
+      <button type="button" id="taskComplete" class="btn secondary">Complete</button>
+      <button type="submit" class="btn primary">Save</button>
+    </div>
+  </form>
+</section>
+
+<section id="profileSheet" class="sheet profile-sheet" hidden aria-label="Choose who is using the app">
+  <div class="sheet-handle"></div>
+  <h2 id="profileTitle">Who is this?</h2>
+  <p id="profileHint" class="muted">Each person keeps their own list on this page. Pick your name or add a new one.</p>
+  <div id="profileList" class="profile-list"></div>
+  <form id="profileForm" autocomplete="off">
+    <label class="field"><span>Name</span><input id="pName" type="text" maxlength="40" placeholder="Your name"></label>
+    <label class="field"><span id="pPinLabel">PIN (optional)</span><input id="pPin" type="password" inputmode="numeric" maxlength="8" placeholder="4 to 8 digits"></label>
+    <p id="profileError" class="form-error" hidden></p>
+    <div class="sheet-actions">
+      <button type="button" id="profileBack" class="btn text" hidden>Back</button>
+      <div class="spacer"></div>
+      <button type="submit" id="profileSubmit" class="btn primary">Continue</button>
+    </div>
+  </form>
+</section>
+
+<section id="confirmSheet" class="sheet confirm-sheet" hidden role="alertdialog" aria-labelledby="confirmTitle">
+  <div class="sheet-handle"></div>
+  <h2 id="confirmTitle">Are you sure?</h2>
+  <p id="confirmText" class="muted"></p>
+  <div class="sheet-actions">
+    <button type="button" id="confirmCancel" class="btn secondary">Cancel</button>
+    <div class="spacer"></div>
+    <button type="button" id="confirmOk" class="btn danger">Delete</button>
+  </div>
+</section>
+
+<div id="toast" class="toast" hidden role="status">
+  <span id="toastText"></span>
+  <button id="toastAction" class="btn text" type="button" hidden>Undo</button>
+</div>
+
+<script>
+(() => {
+'use strict';
+// ---- js/dates.js ----
+// Small date helpers. All dates are handled in local time and stored as
+// ISO calendar strings (YYYY-MM-DD) and 24h clock strings (HH:MM).
+
+const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const pad = (n) => String(n).padStart(2, '0');
+
+function toISODate(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function fromISODate(s) {
+  if (!s) return null;
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function addDays(d, n) {
+  const r = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+function addMonths(d, n) {
+  const r = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const lastDay = new Date(r.getFullYear(), r.getMonth() + 1, 0).getDate();
+  r.setDate(Math.min(d.getDate(), lastDay));
+  return r;
+}
+
+function startOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function daysBetween(a, b) {
+  return Math.round((startOfDay(b) - startOfDay(a)) / 86400000);
+}
+
+function toTimeString(h, m) {
+  return `${pad(h)}:${pad(m)}`;
+}
+
+function formatTime(t, hour12 = true) {
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  if (!hour12) return toTimeString(h, m);
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  return m === 0 ? `${hh} ${suffix}` : `${hh}:${pad(m)} ${suffix}`;
+}
+
+function formatDate(iso, now = new Date()) {
+  const d = fromISODate(iso);
+  if (!d) return '';
+  const diff = daysBetween(now, d);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  if (diff === -1) return 'Yesterday';
+  if (diff > 1 && diff < 7) return WEEKDAYS[d.getDay()].replace(/^\w/, (c) => c.toUpperCase());
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return `${WEEKDAYS_SHORT[d.getDay()]}, ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}${sameYear ? '' : ' ' + d.getFullYear()}`;
+}
+
+function formatLongDate(iso) {
+  const d = fromISODate(iso);
+  if (!d) return '';
+  return `${WEEKDAYS[d.getDay()].replace(/^\w/, (c) => c.toUpperCase())}, ${MONTHS[d.getMonth()].replace(/^\w/, (c) => c.toUpperCase())} ${d.getDate()}`;
+}
+
+function formatDuration(min) {
+  if (!min) return '';
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+// ---- js/parser.js ----
+// Natural-language parser for spoken and typed input.
+//
+// parseInput("call the dentist tomorrow at 3pm high priority") returns
+//   { type: 'add', tasks: [{ title: 'Call the dentist', due: '2026-09-03', time: '15:00', priority: 'high', ... }] }
+//
+// It also recognises commands such as "complete buy milk", "delete the dentist task",
+// "show calendar", "what's on today", "move gym to friday" and "undo".
+
+
+const NUMBER_WORDS = {
+  a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
+  nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, ninety: 90, hundred: 100,
+};
+
+const ORDINAL_WORDS = {
+  first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
+  eleventh: 11, twelfth: 12, thirteenth: 13, fourteenth: 14, fifteenth: 15, sixteenth: 16, seventeenth: 17,
+  eighteenth: 18, nineteenth: 19, twentieth: 20, 'twenty first': 21, 'twenty second': 22, 'twenty third': 23,
+  'twenty fourth': 24, 'twenty fifth': 25, 'twenty sixth': 26, 'twenty seventh': 27, 'twenty eighth': 28,
+  'twenty ninth': 29, thirtieth: 30, 'thirty first': 31,
+};
+
+const WEEKDAY_ALIASES = {
+  sun: 0, sunday: 0, mon: 1, monday: 1, tue: 2, tues: 2, tuesday: 2, wed: 3, wednesday: 3,
+  thu: 4, thur: 4, thurs: 4, thursday: 4, fri: 5, friday: 5, sat: 6, saturday: 6,
+};
+
+const MONTH_ALIASES = {};
+MONTHS.forEach((m, i) => {
+  MONTH_ALIASES[m] = i;
+  MONTH_ALIASES[m.slice(0, 3)] = i;
+});
+MONTH_ALIASES.sept = 8;
+
+const WEEKDAY_RE = '(?:sun|mon|tues?|wed|thu(?:rs?)?|fri|sat)(?:day|nesday|sday|urday)?';
+const MONTH_RE = '(?:jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*';
+
+// ---------- helpers ----------
+
+function normalize(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[‘’]/g, "'")
+    .replace(/\bhashtag\s+/g, '#')
+    .replace(/#\s+/g, '#')
+    .replace(/\b(a\.m\.|a\.m)\b/g, 'am')
+    .replace(/\b(p\.m\.|p\.m)\b/g, 'pm')
+    .replace(/\bo'?clock\b/g, "o'clock")
+    .replace(/\btmrw?\b|\btomorow\b/g, 'tomorrow')
+    .replace(/[.!?]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function numberWordsToDigits(text) {
+  // "twenty five" -> 25, "twenty" -> 20, "three" -> 3. Only replaces number words
+  // in contexts where a number is expected so task titles keep their wording.
+  const tens = '(?:twenty|thirty|forty|fifty)';
+  const units = '(?:one|two|three|four|five|six|seven|eight|nine)';
+  const single = '(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|ninety|a|an)';
+  const numberWord = `(?:${tens}[ -]${units}|${single})`;
+  const toNum = (w) => {
+    const parts = w.split(/[ -]/);
+    return parts.reduce((s, p) => s + (NUMBER_WORDS[p] ?? 0), 0);
+  };
+  const contexts = [
+    new RegExp(`\\b(in|for|every|within)\\s+(${numberWord})\\s+(minutes?|mins?|hours?|hrs?|days?|weeks?|months?|years?)\\b`, 'g'),
+    new RegExp(`\\b(at|around|by|until|till|before|after)\\s+(${numberWord})(?=\\s*(?:am|pm|o'clock|in the|tonight|tomorrow|today|:|$|\\s))`, 'g'),
+    new RegExp(`\\b(${numberWord})\\s*(am|pm|o'clock)\\b`, 'g'),
+    new RegExp(`\\b(half past|quarter past|quarter to|quarter till)\\s+(${numberWord})\\b`, 'g'),
+  ];
+  let out = text;
+  out = out.replace(contexts[0], (m, p, n, u) => `${p} ${toNum(n)} ${u}`);
+  out = out.replace(contexts[1], (m, p, n) => `${p} ${toNum(n)}`);
+  out = out.replace(contexts[2], (m, n, s) => `${toNum(n)} ${s}`);
+  out = out.replace(contexts[3], (m, p, n) => `${p} ${toNum(n)}`);
+  // Ordinal words: "the fifteenth" -> "the 15th"
+  const ordinalKeys = Object.keys(ORDINAL_WORDS).sort((a, b) => b.length - a.length);
+  const ord = (n) => `${n}${[1, 21, 31].includes(n) ? 'st' : [2, 22].includes(n) ? 'nd' : [3, 23].includes(n) ? 'rd' : 'th'}`;
+  out = out.replace(new RegExp(`\\b((?:on|by|until|till|for|due) the|${MONTH_RE}(?: the)?)\\s+(${ordinalKeys.join('|')})\\b`, 'g'), (m, p, w) => `${p} ${ord(ORDINAL_WORDS[w])}`);
+  out = out.replace(new RegExp(`\\b(${ordinalKeys.join('|')})\\s+(of\\s+${MONTH_RE})\\b`, 'g'), (m, w, rest) => `${ord(ORDINAL_WORDS[w])} ${rest}`);
+  return out;
+}
+
+function cleanTitle(raw) {
+  let t = raw
+    .replace(/\s+/g, ' ')
+    .replace(/\s*,\s*,/g, ',')
+    .replace(/^[\s,;:\-]+|[\s,;:\-]+$/g, '')
+    // dangling prepositions left after removing date/time phrases
+    .replace(/\s+(on|at|by|in|for|the|to|until|till|from|and|with|due|around|of|this|next)$/i, '')
+    .replace(/^(on|at|by|in|for|to|the|and|due)\s+/i, '')
+    .replace(/\s+(on|at|by|in|for|the|to|until|till|from|and|due|around|of|this|next)$/i, '')
+    .replace(/\s+(on|at|by|in|for|to|the|and|due)$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t) return '';
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+function resolveHour(h, m, meridiem, period) {
+  // Returns [hour24, minute] from a possibly-ambiguous hour.
+  if (meridiem === 'am') return [h === 12 ? 0 : h, m];
+  if (meridiem === 'pm') return [h === 12 ? 12 : h + 12, m];
+  if (h > 12) return [h, m]; // 24h clock
+  if (period === 'morning') return [h === 12 ? 0 : h, m];
+  if (period === 'afternoon' || period === 'evening' || period === 'night') return [h === 12 ? 12 : h + 12, m];
+  // Heuristic: 7-11 -> morning, 12 -> noon, 1-6 -> afternoon/evening
+  if (h >= 7 && h <= 11) return [h, m];
+  if (h === 12) return [12, m];
+  if (h === 0) return [0, m];
+  return [h + 12, m];
+}
+
+// ---------- extraction ----------
+
+function extractPriority(text) {
+  let priority = 'normal';
+  let t = text;
+  const high = /\b(urgent(?:ly)?|asap|as soon as possible|critical|top priority|high priority|priority high|very important|important|must do|make it high)\b/;
+  const low = /\b(low priority|priority low|not urgent|no rush|whenever|someday|when i get a chance|make it low)\b/;
+  if (high.test(t)) { priority = 'high'; t = t.replace(high, ' '); }
+  else if (low.test(t)) { priority = 'low'; t = t.replace(low, ' '); }
+  return { priority, text: t };
+}
+
+function extractTags(text) {
+  const tags = [];
+  let t = text.replace(/#([a-z0-9_-]+)/g, (m, tag) => { tags.push(tag); return ' '; });
+  t = t.replace(/\b(?:tag(?:ged)?(?: it| as| with)?|label(?:l?ed)?(?: it| as)?|categor(?:y|ize)(?: as)?|under|in (?:the|my) (?:list|category)?)\s+([a-z0-9_-]+)(?:\s+(?:list|category|tag))?\b/g, (m, tag) => {
+    if (['the', 'a', 'my', 'it'].includes(tag)) return m;
+    tags.push(tag);
+    return ' ';
+  });
+  return { tags: [...new Set(tags)], text: t };
+}
+
+function extractRepeat(text, ctx) {
+  let t = text;
+  let repeat = null;
+  const rules = [
+    { re: /\b(every|each) (week ?day|weekdays)\b/, val: 'weekdays' },
+    { re: /\b(every|each) (weekend)\b/, val: 'weekly', weekday: 6 },
+    { re: /\b(every|each) other day\b/, val: 'every2days' },
+    { re: /\b(every|each) other week\b/, val: 'biweekly' },
+    { re: /\b(every|each) (morning)\b/, val: 'daily', time: '09:00' },
+    { re: /\b(every|each) (afternoon)\b/, val: 'daily', time: '14:00' },
+    { re: /\b(every|each) (evening)\b/, val: 'daily', time: '18:00' },
+    { re: /\b(every|each) (night)\b/, val: 'daily', time: '21:00' },
+    { re: /\b(every|each) (day|single day)\b|\bdaily\b/, val: 'daily' },
+    { re: /\b(every|each) (week)\b|\bweekly\b/, val: 'weekly' },
+    { re: /\b(every|each) (two|2) weeks\b|\b(bi-?weekly|fortnightly)\b/, val: 'biweekly' },
+    { re: /\b(every|each) (month)\b|\bmonthly\b/, val: 'monthly' },
+    { re: /\b(every|each) (year)\b|\b(yearly|annually)\b/, val: 'yearly' },
+  ];
+  for (const rule of rules) {
+    if (rule.re.test(t)) {
+      repeat = rule.val;
+      t = t.replace(rule.re, ' ');
+      if (rule.time) ctx.defaultTime = rule.time;
+      if (rule.weekday !== undefined) ctx.repeatWeekday = rule.weekday;
+      break;
+    }
+  }
+  if (!repeat) {
+    const wd = new RegExp(`\\b(every|each) (${WEEKDAY_RE})s?\\b`);
+    const m = t.match(wd);
+    if (m) {
+      repeat = 'weekly';
+      ctx.repeatWeekday = WEEKDAY_ALIASES[m[2].replace(/s$/, '')] ?? WEEKDAY_ALIASES[m[2]];
+      t = t.replace(wd, ' ');
+    }
+  }
+  return { repeat, text: t };
+}
+
+function extractDuration(text) {
+  let durationMin = null;
+  let t = text;
+  const re = /\b(?:for|lasting|takes?|taking)\s+(?:about\s+|around\s+)?(\d+(?:\.\d+)?)\s*(minutes?|mins?|m|hours?|hrs?|h)\b/;
+  const m = t.match(re);
+  if (m) {
+    const n = parseFloat(m[1]);
+    durationMin = /^h/.test(m[2]) ? Math.round(n * 60) : Math.round(n);
+    t = t.replace(re, ' ');
+  } else if (/\bfor (half an hour|30 minutes)\b/.test(t)) {
+    durationMin = 30; t = t.replace(/\bfor (half an hour|30 minutes)\b/, ' ');
+  } else if (/\bfor an hour and a half\b/.test(t)) {
+    durationMin = 90; t = t.replace(/\bfor an hour and a half\b/, ' ');
+  } else if (/\bfor (an|1) hour\b/.test(t)) {
+    durationMin = 60; t = t.replace(/\bfor (an|1) hour\b/, ' ');
+  }
+  return { durationMin, text: t };
+}
+
+function extractTime(text, ctx) {
+  let t = text;
+  let time = null;
+  let period = null;
+
+  // Period of day words (also influence ambiguous hours)
+  const periods = [
+    { re: /\b(this morning|in the morning|morning)\b/, p: 'morning', h: 9, today: /this morning/ },
+    { re: /\b(this afternoon|in the afternoon|afternoon)\b/, p: 'afternoon', h: 14, today: /this afternoon/ },
+    { re: /\b(tonight)\b/, p: 'evening', h: 19, today: /tonight/ },
+    { re: /\b(this evening|in the evening|evening)\b/, p: 'evening', h: 19, today: /this evening/ },
+    { re: /\b(at night|late tonight)\b/, p: 'night', h: 21 },
+    { re: /\b(first thing)\b/, p: 'morning', h: 8 },
+    { re: /\b(end of (?:the )?day|eod|before bed|close of business|cob)\b/, p: 'evening', h: 17 },
+    { re: /\b(after work)\b/, p: 'evening', h: 18 },
+    { re: /\b(at lunch ?time|at lunch|lunch ?time)\b/, p: 'afternoon', h: 12 },
+    { re: /\b(at )?(noon|midday)\b/, p: 'afternoon', h: 12, exact: true },
+    { re: /\b(at )?(midnight)\b/, p: 'night', h: 23, min: 59, exact: true },
+  ];
+  for (const p of periods) {
+    const m = t.match(p.re);
+    if (m) {
+      period = p.p;
+      ctx.defaultTime = toTimeString(p.h, p.min || 0);
+      if (p.exact) time = ctx.defaultTime;
+      if (p.today && p.today.test(m[0])) ctx.forceToday = true;
+      t = t.replace(p.re, ' ');
+      break;
+    }
+  }
+
+  const patterns = [
+    // 3:30pm, 3 pm, 15:00, at 3, around 3:15, by 5pm
+    { re: /\b(?:at|around|about|by|@|until|till|before|after)?\s*(\d{1,2})[:.](\d{2})\s*(am|pm)?\b/, hasMin: true },
+    { re: /\b(?:at|around|about|by|@|until|till|before|after)?\s*(\d{1,2})\s*(am|pm)\b/, hasMin: false },
+    { re: /\b(?:at|around|about|by|@|until|till|before|after)\s+(\d{1,2})\b(?!\s*(?:st|nd|rd|th|\/|-|\d|:|am|pm|minutes?|mins?|hours?|hrs?|days?|weeks?|months?|o'clock|%|dollars|people|percent))/, hasMin: false },
+    { re: /\b(\d{1,2})\s*o'clock\b/, hasMin: false },
+  ];
+  const wordPatterns = [
+    { re: /\bhalf past (\d{1,2})\b(?:\s*(am|pm))?/, min: 30 },
+    { re: /\bquarter past (\d{1,2})\b(?:\s*(am|pm))?/, min: 15 },
+    { re: /\bquarter (?:to|till) (\d{1,2})\b(?:\s*(am|pm))?/, min: 45, before: true },
+  ];
+
+  if (!time) {
+    for (const wp of wordPatterns) {
+      const m = t.match(wp.re);
+      if (m) {
+        let h = parseInt(m[1], 10);
+        if (wp.before) h = h - 1 < 0 ? 23 : h - 1;
+        const [hh, mm] = resolveHour(h, wp.min, m[2] || null, period);
+        time = toTimeString(hh, mm);
+        t = t.replace(wp.re, ' ');
+        break;
+      }
+    }
+  }
+  if (!time) {
+    for (const p of patterns) {
+      const m = t.match(p.re);
+      if (!m) continue;
+      const h = parseInt(m[1], 10);
+      const min = p.hasMin ? parseInt(m[2], 10) : 0;
+      const mer = p.hasMin ? m[3] : m[2];
+      if (h > 23 || min > 59) continue;
+      if (mer === undefined && p.hasMin && !/\b(?:at|around|about|by|@|until|till|before|after)\s*\d/.test(m[0]) && h > 23) continue;
+      const [hh, mm] = resolveHour(h, min, mer ? mer.replace(/[^ap]/g, '').slice(0, 1) + 'm' : null, period);
+      time = toTimeString(hh, mm);
+      t = t.replace(p.re, ' ');
+      // A "quarter" style time with a time-of-day word right after e.g. "at 3 in the afternoon"
+      break;
+    }
+  }
+  return { time, text: t, period };
+}
+
+function extractDate(text, now, ctx) {
+  let t = text;
+  let due = null;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const set = (d) => { due = toISODate(d); };
+
+  const nextWeekday = (idx, from = today, includeToday = true) => {
+    let diff = (idx - from.getDay() + 7) % 7;
+    if (diff === 0 && !includeToday) diff = 7;
+    return addDays(from, diff);
+  };
+  const followingWeekday = (idx) => {
+    // "next monday": the one in the following calendar week (weeks start Monday)
+    const dow = (today.getDay() + 6) % 7; // 0 = Monday
+    const monday = addDays(today, -dow + 7);
+    const target = (idx + 6) % 7;
+    return addDays(monday, target);
+  };
+
+  const rules = [
+    { re: /\b(the )?day after tomorrow\b/, fn: () => set(addDays(today, 2)) },
+    { re: /\btomorrow\b/, fn: () => set(addDays(today, 1)) },
+    { re: /\btoday\b/, fn: () => set(today) },
+    { re: /\byesterday\b/, fn: () => set(addDays(today, -1)) },
+    { re: /\bin (\d+) (minutes?|mins?)\b/, fn: (m) => { const d = new Date(now.getTime() + parseInt(m[1], 10) * 60000); set(d); ctx.timeFromRelative = toTimeString(d.getHours(), d.getMinutes()); } },
+    { re: /\bin (\d+) (hours?|hrs?)\b/, fn: (m) => { const d = new Date(now.getTime() + parseInt(m[1], 10) * 3600000); set(d); ctx.timeFromRelative = toTimeString(d.getHours(), d.getMinutes()); } },
+    { re: /\bin (\d+) days?\b/, fn: (m) => set(addDays(today, parseInt(m[1], 10))) },
+    { re: /\bin (\d+) weeks?\b/, fn: (m) => set(addDays(today, 7 * parseInt(m[1], 10))) },
+    { re: /\bin (\d+) months?\b/, fn: (m) => set(addMonths(today, parseInt(m[1], 10))) },
+    { re: /\bin (\d+) years?\b/, fn: (m) => set(new Date(today.getFullYear() + parseInt(m[1], 10), today.getMonth(), today.getDate())) },
+    { re: /\b(a|one) week from (today|now)\b/, fn: () => set(addDays(today, 7)) },
+    { re: /\b(a|one) week from tomorrow\b/, fn: () => set(addDays(today, 8)) },
+    { re: /\bnext week\b/, fn: () => set(followingWeekday(1)) },
+    { re: /\bnext weekend\b/, fn: () => set(followingWeekday(6)) },
+    { re: /\b(this )?weekend\b/, fn: () => set(nextWeekday(6)) },
+    { re: /\bend of (the )?(week|this week)\b/, fn: () => set(nextWeekday(5)) },
+    { re: /\bend of (the )?(month|this month)\b/, fn: () => set(new Date(today.getFullYear(), today.getMonth() + 1, 0)) },
+    { re: /\bend of (the )?(year|this year)\b/, fn: () => set(new Date(today.getFullYear(), 11, 31)) },
+    { re: /\bnext month\b/, fn: () => set(new Date(today.getFullYear(), today.getMonth() + 1, 1)) },
+    { re: /\bnext year\b/, fn: () => set(new Date(today.getFullYear() + 1, 0, 1)) },
+    { re: /\bthis week\b/, fn: () => set(nextWeekday(5)) },
+    { re: /\bthis month\b/, fn: () => set(new Date(today.getFullYear(), today.getMonth() + 1, 0)) },
+    // ISO or numeric dates: 2026-10-15, 10/15, 10/15/2026, 10-15
+    { re: /\b(\d{4})-(\d{1,2})-(\d{1,2})\b/, fn: (m) => set(new Date(+m[1], +m[2] - 1, +m[3])) },
+    { re: /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/, fn: (m) => {
+      let y = m[3] ? parseInt(m[3], 10) : today.getFullYear();
+      if (m[3] && m[3].length === 2) y += 2000;
+      let d = new Date(y, +m[1] - 1, +m[2]);
+      if (!m[3] && d < today) d = new Date(y + 1, +m[1] - 1, +m[2]);
+      set(d);
+    } },
+    // month day: "october 15", "oct 15th", "october 15 2026"
+    { re: new RegExp(`\\b(?:on |by |for )?(${MONTH_RE})\\.? (\\d{1,2})(?:st|nd|rd|th)?(?:,? (\\d{4}))?\\b`), fn: (m) => {
+      const mi = MONTH_ALIASES[m[1].slice(0, 3)];
+      if (mi === undefined) return false;
+      let y = m[3] ? +m[3] : today.getFullYear();
+      let d = new Date(y, mi, +m[2]);
+      if (!m[3] && d < today) d = new Date(y + 1, mi, +m[2]);
+      set(d);
+    } },
+    // day month: "15 october", "15th of october", "the 15th of oct"
+    { re: new RegExp(`\\b(?:on |by |for )?(?:the )?(\\d{1,2})(?:st|nd|rd|th)?(?: of)? (${MONTH_RE})\\b(?:,? (\\d{4}))?`), fn: (m) => {
+      const mi = MONTH_ALIASES[m[2].slice(0, 3)];
+      if (mi === undefined) return false;
+      let y = m[3] ? +m[3] : today.getFullYear();
+      let d = new Date(y, mi, +m[1]);
+      if (!m[3] && d < today) d = new Date(y + 1, mi, +m[1]);
+      set(d);
+    } },
+    // "on the 15th" / "the 15th"
+    { re: /\b(?:on |by |for )?the (\d{1,2})(?:st|nd|rd|th)\b/, fn: (m) => {
+      let d = new Date(today.getFullYear(), today.getMonth(), +m[1]);
+      if (d < today) d = new Date(today.getFullYear(), today.getMonth() + 1, +m[1]);
+      set(d);
+    } },
+    // weekdays: "next friday", "this friday", "on friday", "friday"
+    { re: new RegExp(`\\bnext (${WEEKDAY_RE})\\b`), fn: (m) => set(followingWeekday(WEEKDAY_ALIASES[m[1]] ?? WEEKDAY_ALIASES[m[1].slice(0, 3)])) },
+    { re: new RegExp(`\\b(?:on |by |for |this |this coming |coming )?(${WEEKDAY_RE})\\b`), fn: (m) => {
+      const idx = WEEKDAY_ALIASES[m[1]] ?? WEEKDAY_ALIASES[m[1].slice(0, 3)];
+      if (idx === undefined) return false;
+      set(nextWeekday(idx));
+    } },
+  ];
+
+  for (const rule of rules) {
+    const m = t.match(rule.re);
+    if (m) {
+      const r = rule.fn(m);
+      if (r === false) continue;
+      t = t.replace(rule.re, ' ');
+      break;
+    }
+  }
+  return { due, text: t };
+}
+
+// ---------- task parsing ----------
+
+const LEAD_INS = /^(?:(?:please|hey|ok|okay|hi|um|uh|so)\s+)*(?:(?:add|create|new|make|set|schedule|plan|log|put|note|remind me to|remind me|reminder to|reminder|remember to|remember|i need to|i've got to|i have to|i must|i should|i want to|i'd like to|i gotta|got to|gotta|note to self|don't forget to|do not forget to|task|to do|todo|a task to|task to|an? (?:new )?(?:task|todo|reminder|item)(?: to| for)?)[:,]?\s+)+/;
+
+function parseTask(text, now = new Date()) {
+  const ctx = {};
+  let t = numberWordsToDigits(normalize(text));
+  t = t.replace(LEAD_INS, '');
+  t = t.replace(/^(?:that )?(?:i )?(?:need|have) to\s+/, '');
+
+  const pr = extractPriority(t); t = pr.text;
+  const tg = extractTags(t); t = tg.text;
+  const rp = extractRepeat(t, ctx); t = rp.text;
+  const du = extractDuration(t); t = du.text;
+  const tm = extractTime(t, ctx); t = tm.text;
+  const dt = extractDate(t, now, ctx); t = dt.text;
+
+  // Notes: "note: ..." or "notes ..." or "with note ..."
+  let notes = '';
+  const noteMatch = t.match(/\b(?:with (?:the )?notes?|notes?|details?|description)[:\s]+(.+)$/);
+  if (noteMatch) { notes = noteMatch[1].trim(); t = t.slice(0, noteMatch.index); }
+
+  let time = tm.time || ctx.timeFromRelative || null;
+  if (!time && ctx.defaultTime) time = ctx.defaultTime;
+  let due = dt.due;
+
+  if (!due && ctx.repeatWeekday !== undefined) {
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let diff = (ctx.repeatWeekday - today.getDay() + 7) % 7;
+    if (diff === 0 && time && time <= toTimeString(now.getHours(), now.getMinutes())) diff = 7;
+    due = toISODate(addDays(today, diff));
+  }
+  if (!due && rp.repeat) {
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let d = today;
+    if (rp.repeat === 'weekdays' && (d.getDay() === 0 || d.getDay() === 6)) d = addDays(d, d.getDay() === 6 ? 2 : 1);
+    if (time && time <= toTimeString(now.getHours(), now.getMinutes()) && toISODate(d) === toISODate(today)) d = addDays(d, 1);
+    due = toISODate(d);
+  }
+  if (!due && ctx.forceToday) due = toISODate(now);
+  if (!due && time) {
+    // A bare time means today, unless that moment has already passed.
+    const nowStr = toTimeString(now.getHours(), now.getMinutes());
+    due = toISODate(time > nowStr ? now : addDays(now, 1));
+  }
+
+  const title = cleanTitle(t);
+  return {
+    title,
+    due,
+    time,
+    priority: pr.priority,
+    tags: tg.tags,
+    repeat: rp.repeat,
+    durationMin: du.durationMin,
+    notes,
+  };
+}
+
+// ---------- commands ----------
+
+function splitTasks(text) {
+  return text
+    .split(/\s*(?:,\s*|;\s*)?\b(?:and then|and also|also|then|plus|as well as|and add|and another|another one|next one|second one|new task)\b\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function stripTaskWord(s) {
+  return s.replace(/^(?:the |my |that |this )?(?:task |item |to ?do |reminder )?(?:called |named |for |to |about |of )?/, '')
+    .replace(/\s+(?:task|item|to ?do|reminder|off|as (?:done|complete|completed|finished)|from (?:the |my )?list)$/, '')
+    .replace(/^(?:the |my )/, '')
+    .trim();
+}
+
+const VIEW_WORDS = {
+  calendar: 'calendar', month: 'calendar', schedule: 'calendar', agenda: 'calendar',
+  list: 'list', tasks: 'list', 'to do list': 'list', 'todo list': 'list', checklist: 'list', 'check list': 'list',
+  insights: 'insights', stats: 'insights', statistics: 'insights', progress: 'insights', dashboard: 'insights',
+  settings: 'settings', options: 'settings', preferences: 'settings',
+  today: 'today', tomorrow: 'tomorrow', overdue: 'overdue', completed: 'completed', done: 'completed',
+};
+
+function parseInput(input, now = new Date()) {
+  const raw = normalize(input);
+  if (!raw) return { type: 'noop' };
+  const t = numberWordsToDigits(raw);
+  let m;
+
+  if (/^(?:undo|undo that|undo last|undo the last one|take that back|never ?mind|cancel that)$/.test(t)) return { type: 'undo' };
+  if (/^(?:redo|redo that)$/.test(t)) return { type: 'redo' };
+  if (/^(?:stop|stop listening|that's all|that is all|that's it|done|finished|goodbye|bye|thanks|thank you)$/.test(t)) return { type: 'stop' };
+
+  // Navigation
+  m = t.match(/^(?:show|open|go to|goto|switch to|view|display|take me to)(?: me)?(?: the| my)?\s+(calendar|month|schedule|agenda|list|tasks|to do list|todo list|checklist|check list|insights|stats|statistics|progress|dashboard|settings|options|preferences|today|tomorrow|overdue|completed|done)(?:\s+(?:view|mode|tasks|page|screen))?$/);
+  if (m) return { type: 'navigate', view: VIEW_WORDS[m[1]] };
+  m = t.match(/^(calendar|list|insights|settings)(?:\s+(?:view|mode))?$/);
+  if (m) return { type: 'navigate', view: VIEW_WORDS[m[1]] };
+
+  // Theme
+  m = t.match(/^(?:switch to|turn on|enable|use|set)\s+(dark|light|system)\s*(?:mode|theme)?$/);
+  if (m) return { type: 'theme', theme: m[1] };
+
+  // Read back
+  m = t.match(/^(?:what(?:'s| is| do i have| have i got| am i doing)|what's on|whats on|read(?: me)?|tell me|list|recap|summarize|summary of|brief me on|briefing)(?: my| the| out)?(?: tasks| to ?dos| schedule| plan| agenda| day| list)?(?: (?:for|on|is|are))?(?: (?:planned|scheduled|due|left|open|remaining))?(?: (?:for|on))?\s*(today|tomorrow|this week|the week|overdue|late|next week|everything|all|the rest of the day)?\s*(?:\??)$/);
+  if (m) {
+    const scope = { undefined: 'today', today: 'today', tomorrow: 'tomorrow', 'this week': 'week', 'the week': 'week', 'next week': 'nextweek', overdue: 'overdue', late: 'overdue', everything: 'all', all: 'all', 'the rest of the day': 'today' }[m[1]];
+    return { type: 'read', scope: scope || 'today' };
+  }
+  m = t.match(/^(?:what(?:'s| is)|read)\s+(?:on|for|due|scheduled)?\s*(?:the |this )?(?:calendar |schedule )?(?:for |on )?(tomorrow|today|.+)$/);
+  if (m) {
+    const scope = m[1];
+    if (scope === 'today' || scope === 'tomorrow') return { type: 'read', scope };
+    const d = extractDate(scope, now, {});
+    if (d.due) return { type: 'read', scope: 'date', date: d.due };
+  }
+
+  // Clear completed
+  if (/^(?:clear|remove|delete|purge|archive)\s+(?:all\s+)?(?:the\s+)?(?:completed|done|finished|checked)(?:\s+(?:tasks|items|ones))?$/.test(t)) return { type: 'clearCompleted' };
+
+  // Complete
+  m = t.match(/^(?:complete|completed|finish|finished|done with|i finished|i completed|i did|i've done|i have done|check off|check|tick off|tick|mark(?: off)?|mark done|mark complete|cross off|cross out|close|i've finished)\s+(.+)$/);
+  if (m) {
+    let q = m[1].replace(/^(?:off\s+|done\s+|complete\s+)/, '');
+    const queryText = stripTaskWord(q);
+    if (queryText === 'everything' || queryText === 'all' || queryText === 'all tasks') return { type: 'completeAll' };
+    return { type: 'complete', query: queryText };
+  }
+  m = t.match(/^(.+?)\s+(?:is|was)\s+(?:done|complete|completed|finished)$/);
+  if (m) return { type: 'complete', query: stripTaskWord(m[1]) };
+
+  // Reopen
+  m = t.match(/^(?:reopen|uncomplete|uncheck|undo complete|mark (?:as )?(?:incomplete|not done|undone))\s+(.+)$/);
+  if (m) return { type: 'reopen', query: stripTaskWord(m[1]) };
+
+  // Delete
+  m = t.match(/^(?:delete|remove|cancel|scrap|erase|trash|drop|get rid of|forget about|forget)\s+(.+)$/);
+  if (m) {
+    const queryText = stripTaskWord(m[1]);
+    if (/^(?:everything|all|all tasks|the whole list)$/.test(queryText)) return { type: 'deleteAll' };
+    return { type: 'delete', query: queryText };
+  }
+
+  // Reschedule: "move gym to friday", "postpone dentist until next week", "push X by 2 days"
+  m = t.match(/^(?:move|reschedule|postpone|push(?: back)?|defer|delay|shift|change)\s+(.+?)\s+(?:to|until|till|for|by)\s+(.+)$/);
+  if (m) {
+    const ctx = {};
+    let tail = m[2];
+    const tm = extractTime(tail, ctx); tail = tm.text;
+    const dt = extractDate(tail, now, ctx);
+    let byDays = null;
+    const rel = m[2].match(/^(\d+) (days?|weeks?)$/);
+    if (rel) byDays = parseInt(rel[1], 10) * (rel[2].startsWith('week') ? 7 : 1);
+    if (dt.due || tm.time || byDays) {
+      return { type: 'reschedule', query: stripTaskWord(m[1]), due: dt.due, time: tm.time || ctx.timeFromRelative || ctx.defaultTime || null, byDays };
+    }
+  }
+
+  // Priority changes: "make dentist high priority", "set gym to low priority"
+  m = t.match(/^(?:make|set|mark|change|flag)\s+(.+?)\s+(?:to |as )?(high|low|normal|medium)\s*priority$/);
+  if (m) return { type: 'setPriority', query: stripTaskWord(m[1]), priority: m[2] === 'medium' ? 'normal' : m[2] };
+  m = t.match(/^(?:prioritize|prioritise|flag|star)\s+(.+)$/);
+  if (m) return { type: 'setPriority', query: stripTaskWord(m[1]), priority: 'high' };
+
+  // Rename: "rename X to Y"
+  m = t.match(/^(?:rename|change the name of|retitle)\s+(.+?)\s+to\s+(.+)$/);
+  if (m) return { type: 'rename', query: stripTaskWord(m[1]), title: cleanTitle(m[2]) };
+
+  // Search
+  m = t.match(/^(?:search(?: for)?|find|look for|look up|filter(?: by)?|show me)\s+(.+)$/);
+  if (m) {
+    const q = m[1].replace(/^(?:tasks? |everything |all )?(?:about |with |containing |tagged |for |called |named )?/, '').replace(/\s+tasks?$/, '');
+    return { type: 'search', query: q };
+  }
+  if (/^(?:clear search|clear filter|show all|show everything|reset)$/.test(t)) return { type: 'search', query: '' };
+
+  // Default: add one or more tasks
+  const parts = splitTasks(t);
+  const tasks = parts.map((p) => parseTask(p, now)).filter((task) => task.title);
+  if (!tasks.length) return { type: 'noop' };
+  return { type: 'add', tasks };
+}
+
+// Fuzzy matching of a spoken query against existing task titles.
+const STOP = new Set(['the', 'a', 'an', 'to', 'my', 'of', 'for', 'and', 'task', 'item', 'that', 'this', 'on', 'in', 'at', 'with']);
+
+function tokens(s) {
+  return normalize(s).replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w && !STOP.has(w));
+}
+
+function stem(w) {
+  return w.replace(/(ing|ed|es|s)$/, '');
+}
+
+function scoreMatch(query, title) {
+  const q = tokens(query).map(stem);
+  const tt = tokens(title).map(stem);
+  if (!q.length || !tt.length) return 0;
+  const normQ = normalize(query);
+  const normT = normalize(title);
+  if (normQ === normT) return 1;
+  if (normT.includes(normQ) || normQ.includes(normT)) return 0.9;
+  let hits = 0;
+  for (const w of q) {
+    if (tt.some((x) => x === w || (w.length > 3 && (x.startsWith(w) || w.startsWith(x))))) hits += 1;
+  }
+  const precision = hits / q.length;
+  const recall = hits / tt.length;
+  if (!hits) return 0;
+  return (2 * precision * recall) / (precision + recall);
+}
+
+function findBestMatch(query, tasks, { threshold = 0.45 } = {}) {
+  let best = null;
+  let bestScore = 0;
+  for (const task of tasks) {
+    const s = scoreMatch(query, task.title);
+    if (s > bestScore) { best = task; bestScore = s; }
+  }
+  return bestScore >= threshold ? { task: best, score: bestScore } : null;
+}
+
+// ---- js/store.js ----
+// Persistence layer: tasks and settings live in localStorage so the app works
+// fully offline and without an account.
+
+
+const TASKS_KEY = 'cadence.tasks.v1';
+const SETTINGS_KEY = 'cadence.settings.v1';
+
+const DEFAULT_SETTINGS = {
+  theme: 'system',            // system | light | dark
+  voiceFeedback: true,        // speak short confirmations
+  continuous: false,          // keep listening after each task
+  language: 'en-US',
+  notifications: false,
+  reminderLead: 0,            // minutes before a timed task (0 = at the time)
+  hour12: true,
+  weekStart: 1,               // 0 = Sunday, 1 = Monday
+  showCompleted: true,
+  confirmBeforeAdd: false,    // review a parsed task before it is saved
+  morningBriefing: false,     // speak today's tasks when the app opens
+};
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function loadTasks() {
+  try {
+    const raw = localStorage.getItem(TASKS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.map(sanitizeTask) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTasks(tasks) {
+  try {
+    localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
+  } catch (e) {
+    console.warn('Could not save tasks', e);
+  }
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    return { ...DEFAULT_SETTINGS, ...(raw ? JSON.parse(raw) : {}) };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function saveSettings(settings) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch (e) {
+    console.warn('Could not save settings', e);
+  }
+}
+
+function sanitizeTask(t) {
+  return {
+    id: t.id || uid(),
+    title: String(t.title || '').trim(),
+    notes: String(t.notes || ''),
+    due: t.due || null,
+    time: t.time || null,
+    priority: ['high', 'normal', 'low'].includes(t.priority) ? t.priority : 'normal',
+    tags: Array.isArray(t.tags) ? t.tags.map((x) => String(x).toLowerCase()) : [],
+    repeat: t.repeat || null,
+    durationMin: t.durationMin ? Number(t.durationMin) : null,
+    createdAt: t.createdAt || new Date().toISOString(),
+    completedAt: t.completedAt || null,
+    notifiedAt: t.notifiedAt || null,
+    source: t.source || 'text',
+    order: typeof t.order === 'number' ? t.order : Date.now(),
+  };
+}
+
+function createTask(fields) {
+  return sanitizeTask({ ...fields, id: uid(), createdAt: new Date().toISOString(), order: Date.now() });
+}
+
+// Compute the due date of the next occurrence for a repeating task.
+function nextOccurrence(task, today = new Date()) {
+  if (!task.repeat) return null;
+  const base = fromISODate(task.due) || today;
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  let d = base;
+  let guard = 0;
+  do {
+    switch (task.repeat) {
+      case 'daily': d = addDays(d, 1); break;
+      case 'every2days': d = addDays(d, 2); break;
+      case 'weekdays':
+        d = addDays(d, 1);
+        while (d.getDay() === 0 || d.getDay() === 6) d = addDays(d, 1);
+        break;
+      case 'weekly': d = addDays(d, 7); break;
+      case 'biweekly': d = addDays(d, 14); break;
+      case 'monthly': d = addMonths(d, 1); break;
+      case 'yearly': d = new Date(d.getFullYear() + 1, d.getMonth(), d.getDate()); break;
+      default: return null;
+    }
+    guard += 1;
+  } while (d < todayStart && guard < 500);
+  return toISODate(d);
+}
+
+const REPEAT_LABELS = {
+  daily: 'Daily',
+  every2days: 'Every other day',
+  weekdays: 'Weekdays',
+  weekly: 'Weekly',
+  biweekly: 'Every two weeks',
+  monthly: 'Monthly',
+  yearly: 'Yearly',
+};
+
+function exportData(tasks, settings) {
+  return JSON.stringify({ app: 'cadence', version: 1, exportedAt: new Date().toISOString(), tasks, settings }, null, 2);
+}
+
+function importData(json) {
+  const data = JSON.parse(json);
+  const tasks = Array.isArray(data) ? data : data.tasks;
+  if (!Array.isArray(tasks)) throw new Error('No tasks found in file');
+  return { tasks: tasks.map(sanitizeTask), settings: data.settings || null };
+}
+
+// ---- js/voice.js ----
+// Thin wrapper around the browser SpeechRecognition and SpeechSynthesis APIs.
+// Works in Chrome (Android, desktop), Edge, Safari (iOS 14.5+ / macOS) and Samsung Internet.
+
+const Recognition = typeof window !== 'undefined'
+  ? (window.SpeechRecognition || window.webkitSpeechRecognition || null)
+  : null;
+
+const voiceSupported = Boolean(Recognition);
+const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+
+class VoiceInput {
+  constructor({ lang = 'en-US', onInterim, onFinal, onStart, onEnd, onError } = {}) {
+    this.lang = lang;
+    this.onInterim = onInterim || (() => {});
+    this.onFinal = onFinal || (() => {});
+    this.onStart = onStart || (() => {});
+    this.onEnd = onEnd || (() => {});
+    this.onError = onError || (() => {});
+    this.active = false;       // user wants us to be listening
+    this.running = false;      // the engine is actually running
+    this.continuous = false;
+    this.rec = null;
+    this.restartTimer = null;
+    this.lastFinal = '';
+    this.lastFinalAt = 0;
+  }
+
+  setLanguage(lang) {
+    this.lang = lang;
+    if (this.rec) this.rec.lang = lang;
+  }
+
+  _create() {
+    const rec = new Recognition();
+    rec.lang = this.lang;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    // Continuous mode keeps the session open between phrases on Android/desktop Chrome.
+    // iOS Safari ignores it, so we restart on `end` when the user still wants to listen.
+    rec.continuous = this.continuous;
+
+    rec.onstart = () => {
+      this.running = true;
+      this.onStart();
+    };
+    rec.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const res = event.results[i];
+        const text = res[0].transcript;
+        if (res.isFinal) {
+          const clean = text.trim();
+          // Some engines fire the same final result twice; drop exact repeats within 1.5s.
+          if (clean && !(clean === this.lastFinal && Date.now() - this.lastFinalAt < 1500)) {
+            this.lastFinal = clean;
+            this.lastFinalAt = Date.now();
+            this.onFinal(clean, res[0].confidence);
+          }
+        } else {
+          interim += text;
+        }
+      }
+      if (interim) this.onInterim(interim.trim());
+    };
+    rec.onerror = (event) => {
+      // 'no-speech' and 'aborted' are routine; surface the rest.
+      if (event.error === 'no-speech' || event.error === 'aborted') return;
+      this.onError(event.error);
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed' || event.error === 'audio-capture') {
+        this.active = false;
+      }
+    };
+    rec.onend = () => {
+      this.running = false;
+      if (this.active && this.continuous) {
+        clearTimeout(this.restartTimer);
+        this.restartTimer = setTimeout(() => {
+          if (this.active) this._start();
+        }, 250);
+      } else {
+        this.active = false;
+        this.onEnd();
+      }
+    };
+    return rec;
+  }
+
+  _start() {
+    if (!voiceSupported) return;
+    try {
+      this.rec = this._create();
+      this.rec.start();
+    } catch (e) {
+      // start() throws if a session is already running; try again shortly.
+      clearTimeout(this.restartTimer);
+      this.restartTimer = setTimeout(() => { if (this.active) this._start(); }, 400);
+    }
+  }
+
+  start({ continuous = false } = {}) {
+    if (!voiceSupported) {
+      this.onError('unsupported');
+      return;
+    }
+    this.continuous = continuous;
+    this.active = true;
+    if (!this.running) this._start();
+  }
+
+  // Temporarily pause (e.g. while the app is speaking) without leaving listening mode.
+  pause() {
+    if (this.rec && this.running) {
+      const rec = this.rec;
+      this.rec = null;
+      rec.onend = () => { this.running = false; };
+      try { rec.abort(); } catch { /* ignore */ }
+      this.running = false;
+    }
+    clearTimeout(this.restartTimer);
+  }
+
+  resume() {
+    if (this.active && !this.running) this._start();
+  }
+
+  stop() {
+    this.active = false;
+    clearTimeout(this.restartTimer);
+    if (this.rec) {
+      try { this.rec.stop(); } catch { /* ignore */ }
+    } else {
+      this.onEnd();
+    }
+  }
+
+  toggle(opts) {
+    if (this.active) this.stop();
+    else this.start(opts);
+  }
+}
+
+let preferredVoice = null;
+
+function pickVoice(lang) {
+  if (!speechSupported) return null;
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices.length) return null;
+  const base = lang.split('-')[0];
+  const exact = voices.filter((v) => v.lang.replace('_', '-').toLowerCase() === lang.toLowerCase());
+  const same = voices.filter((v) => v.lang.toLowerCase().startsWith(base));
+  const pool = exact.length ? exact : same.length ? same : voices;
+  // Prefer higher quality local voices when the platform labels them.
+  return pool.find((v) => /natural|premium|enhanced|siri|google/i.test(v.name)) || pool.find((v) => v.localService) || pool[0];
+}
+
+function speak(text, { lang = 'en-US', onEnd } = {}) {
+  if (!speechSupported || !text) {
+    if (onEnd) onEnd();
+    return;
+  }
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang;
+    u.rate = 1.02;
+    u.pitch = 1;
+    if (!preferredVoice || !preferredVoice.lang.toLowerCase().startsWith(lang.split('-')[0])) preferredVoice = pickVoice(lang);
+    if (preferredVoice) u.voice = preferredVoice;
+    u.onend = () => { if (onEnd) onEnd(); };
+    u.onerror = () => { if (onEnd) onEnd(); };
+    window.speechSynthesis.speak(u);
+  } catch {
+    if (onEnd) onEnd();
+  }
+}
+
+function stopSpeaking() {
+  if (speechSupported) window.speechSynthesis.cancel();
+}
+
+if (speechSupported && typeof window.speechSynthesis.addEventListener === 'function') {
+  window.speechSynthesis.addEventListener('voiceschanged', () => { preferredVoice = null; });
+}
+
+// ---- artifact/app.js ----
+// Cadence, Claude Artifact edition. Runs inside claude.ai:
+//   sample  -> Claude understands what you say (viewer's own account)
+//   db      -> each person's tasks live in the artifact database, per profile
+//   mcp     -> reminders are filed into the viewer's Google Calendar
+//   downloads -> backups
+// Every capability is optional: without them the page still works from
+// local storage with the built-in parser.
+
+const APP_VERSION = '2.0.0';
+const CALENDAR_SERVER = 'Google Calendar';
+const el = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
+
+const ARTIFACT_DEFAULTS = { ...DEFAULT_SETTINGS, reminderLead: 0, smartParsing: true, calendarSync: true };
+
+const state = {
+  tasks: loadTasks(),
+  settings: { ...ARTIFACT_DEFAULTS, ...loadSettings() },
+  view: 'list',
+  listFilter: 'all',
+  search: '',
+  selectedDate: toISODate(new Date()),
+  calMonth: (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })(),
+  undo: [],
+  redo: [],
+  listening: false,
+  thinking: false,
+  completedOpen: false,
+  pending: null,
+  editingId: null,
+  briefedOn: localStorage.getItem('cadence.briefedOn') || '',
+  // capabilities
+  db: null,
+  sample: null,
+  mcp: null,
+  downloads: null,
+  capsResolved: false,
+  smart: 'unknown',        // unknown | on | off
+  calendar: 'unknown',     // unknown | connected | not_connected | needs_reauth | blocked | unavailable
+  profile: null,           // { slug, name }
+  unsubscribe: null,
+  remoteReady: false,
+};
+
+// ---------------------------------------------------------------- utilities
+
+function now() { return new Date(); }
+function todayISO() { return toISODate(now()); }
+function nowTime() { const d = now(); return toTimeString(d.getHours(), d.getMinutes()); }
+
+function isOverdue(task) {
+  if (!task.due || task.completedAt) return false;
+  if (task.due < todayISO()) return true;
+  if (task.due === todayISO() && task.time && task.time < nowTime()) return true;
+  return false;
+}
+
+const PRIO_RANK = { high: 0, normal: 1, low: 2 };
+
+function sortTasks(a, b) {
+  if ((a.due || '9999') !== (b.due || '9999')) return (a.due || '9999') < (b.due || '9999') ? -1 : 1;
+  if ((a.time || '99') !== (b.time || '99')) return (a.time || '99') < (b.time || '99') ? -1 : 1;
+  if (PRIO_RANK[a.priority] !== PRIO_RANK[b.priority]) return PRIO_RANK[a.priority] - PRIO_RANK[b.priority];
+  return a.order - b.order;
+}
+
+function openTasks() { return state.tasks.filter((t) => !t.completedAt); }
+function completedTasks() { return state.tasks.filter((t) => t.completedAt); }
+
+function matchesSearch(task, q) {
+  if (!q) return true;
+  const hay = `${task.title} ${task.notes} ${task.tags.map((t) => '#' + t).join(' ')} ${task.tags.join(' ')}`.toLowerCase();
+  return q.toLowerCase().split(/\s+/).every((w) => hay.includes(w));
+}
+
+function tasksForDate(iso) { return state.tasks.filter((t) => t.due === iso).sort(sortTasks); }
+
+function describeTask(task, { withDate = true } = {}) {
+  const parts = [];
+  if (withDate && task.due) parts.push(formatDate(task.due, now()));
+  if (task.time) parts.push(formatTime(task.time, state.settings.hour12));
+  if (task.durationMin) parts.push(formatDuration(task.durationMin));
+  if (task.repeat) parts.push(REPEAT_LABELS[task.repeat]);
+  if (task.priority === 'high') parts.push('High priority');
+  if (task.tags.length) parts.push(task.tags.map((t) => '#' + t).join(' '));
+  return parts.join(' · ');
+}
+
+function spokenTask(task, { withDate = true } = {}) {
+  const parts = [task.title];
+  if (withDate && task.due) parts.push(formatDate(task.due, now()).toLowerCase());
+  if (task.time) parts.push('at ' + formatTime(task.time, true));
+  if (task.repeat) parts.push(REPEAT_LABELS[task.repeat].toLowerCase());
+  return parts.join(', ');
+}
+
+function localOffsetISO(due, time) {
+  // "2026-09-04" + "20:00" -> "2026-09-04T20:00:00-05:00" in the viewer's zone.
+  const [y, m, d] = due.split('-').map(Number);
+  const [h, mi] = time.split(':').map(Number);
+  const date = new Date(y, m - 1, d, h, mi, 0, 0);
+  const off = -date.getTimezoneOffset();
+  const sign = off >= 0 ? '+' : '-';
+  const pad = (n) => String(Math.abs(n)).padStart(2, '0');
+  return `${due}T${time}:00${sign}${pad(Math.floor(Math.abs(off) / 60))}:${pad(Math.abs(off) % 60)}`;
+}
+
+function timeZoneName() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
+}
+
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ---------------------------------------------------------------- persistence: local cache + artifact db
+
+function taskDoc(id) { return state.db.collection(`profiles/${state.profile.slug}/tasks`).doc(id); }
+
+function persistDiff(prev, next) {
+  saveTasks(next);
+  const prevById = new Map(prev.map((t) => [t.id, t]));
+  const nextById = new Map(next.map((t) => [t.id, t]));
+  const writes = [];
+  for (const t of next) {
+    const before = prevById.get(t.id);
+    if (!before || JSON.stringify(before) !== JSON.stringify(t)) {
+      if (state.db && state.profile) writes.push(taskDoc(t.id).set(t));
+      syncCalendar(t, before || null);
+    }
+  }
+  for (const t of prev) {
+    if (!nextById.has(t.id)) {
+      if (state.db && state.profile) writes.push(taskDoc(t.id).delete());
+      if (t.calendarEventId) removeCalendarEvent(t.calendarEventId);
+    }
+  }
+  if (writes.length) {
+    Promise.allSettled(writes).then((results) => {
+      const failed = results.find((r) => r.status === 'rejected');
+      if (failed) {
+        const code = failed.reason && failed.reason.code;
+        if (code === 'quota_exceeded') toast('Storage is full. Clear completed tasks to make room.', { duration: 8000 });
+        else if (code !== 'revoked') toast('Could not save to the shared list. Changes are kept on this device.', { duration: 6000 });
+      }
+    });
+  }
+}
+
+function commit(mutator) {
+  const prev = state.tasks.map((t) => ({ ...t, tags: [...t.tags] }));
+  state.undo.push(JSON.stringify(prev));
+  if (state.undo.length > 40) state.undo.shift();
+  state.redo = [];
+  const result = mutator();
+  persistDiff(prev, state.tasks);
+  render();
+  return result;
+}
+
+function undo() {
+  if (!state.undo.length) { toast('Nothing to undo'); return false; }
+  const prev = state.tasks;
+  state.redo.push(JSON.stringify(prev));
+  state.tasks = JSON.parse(state.undo.pop());
+  persistDiff(prev, state.tasks);
+  render();
+  toast('Undone');
+  return true;
+}
+
+function redo() {
+  if (!state.redo.length) { toast('Nothing to redo'); return false; }
+  const prev = state.tasks;
+  state.undo.push(JSON.stringify(prev));
+  state.tasks = JSON.parse(state.redo.pop());
+  persistDiff(prev, state.tasks);
+  render();
+  toast('Redone');
+  return true;
+}
+
+function updateSettings(patch) {
+  state.settings = { ...state.settings, ...patch };
+  saveSettings(state.settings);
+  if (state.db && state.profile) {
+    state.db.doc(`profiles/${state.profile.slug}`).update({ settings: state.settings }).catch(() => {});
+  }
+  applyTheme();
+  voice.setLanguage(state.settings.language);
+  render();
+}
+
+// Quietly attach data to a task without creating an undo step (calendar ids).
+function annotateTask(id, patch) {
+  const t = state.tasks.find((x) => x.id === id);
+  if (!t) return;
+  Object.assign(t, patch);
+  saveTasks(state.tasks);
+  if (state.db && state.profile) taskDoc(id).set(t).catch(() => {});
+}
+
+// ---------------------------------------------------------------- task operations
+
+function addTasks(parsedTasks, source = 'text') {
+  const created = parsedTasks.map((p) => {
+    const fields = { ...p, source };
+    if (!fields.due && state.view === 'calendar' && state.selectedDate !== todayISO()) fields.due = state.selectedDate;
+    return createTask(fields);
+  });
+  commit(() => { state.tasks.push(...created); });
+  return created;
+}
+
+function completeTask(task) {
+  commit(() => {
+    const t = state.tasks.find((x) => x.id === task.id);
+    if (!t) return;
+    t.completedAt = new Date().toISOString();
+    if (t.repeat) {
+      const due = nextOccurrence(t, now());
+      if (due) state.tasks.push(createTask({ ...t, due, completedAt: null, notifiedAt: null, calendarEventId: null }));
+    }
+  });
+}
+
+function reopenTask(task) {
+  commit(() => { const t = state.tasks.find((x) => x.id === task.id); if (t) t.completedAt = null; });
+}
+
+function deleteTask(task) {
+  commit(() => { state.tasks = state.tasks.filter((x) => x.id !== task.id); });
+}
+
+function patchTask(task, patch) {
+  commit(() => {
+    const t = state.tasks.find((x) => x.id === task.id);
+    if (t) Object.assign(t, patch, { notifiedAt: patch.due || patch.time ? null : t.notifiedAt });
+  });
+}
+
+function findTask(query, { includeCompleted = false } = {}) {
+  const pool = includeCompleted ? state.tasks : openTasks();
+  return findBestMatch(query, pool);
+}
+
+// ---------------------------------------------------------------- Google Calendar reminders
+
+function calendarActive() {
+  return Boolean(state.mcp) && state.settings.calendarSync && !['not_connected', 'needs_reauth', 'blocked', 'unavailable'].includes(state.calendar);
+}
+
+function handleCalendarError(e, what) {
+  const code = e && e.code;
+  switch (code) {
+    case 'server_not_connected':
+    case 'selection_required':
+      state.calendar = 'not_connected';
+      toast('Add Google Calendar in claude.ai Settings, Connectors, to get reminders on your phone.', { duration: 8000 });
+      break;
+    case 'needs_reauth':
+      state.calendar = 'needs_reauth';
+      toast('Reconnect Google Calendar in claude.ai Settings, Connectors.', { duration: 8000 });
+      break;
+    case 'not_in_manifest':
+    case 'blocked_by_policy':
+    case 'approval_required':
+      state.calendar = 'blocked';
+      toast('Calendar reminders are not allowed for this account.', { duration: 6000 });
+      break;
+    case 'not_granted':
+    case 'capability_disabled':
+    case 'capability_removed':
+      state.calendar = 'unavailable';
+      break;
+    case 'tool_error':
+      toast(`Google Calendar could not ${what}: ${e.message || 'unknown error'}`, { duration: 7000 });
+      break;
+    case 'cancelled':
+      break;
+    default:
+      toast(`Could not reach Google Calendar to ${what}. The task is saved; the phone reminder is not.`, { duration: 7000 });
+  }
+  if (state.view === 'settings') render();
+}
+
+async function syncCalendar(task, before) {
+  if (!state.mcp) return;
+  const wants = Boolean(task.due && task.time && !task.completedAt) && state.settings.calendarSync;
+  const had = Boolean(task.calendarEventId);
+  if (!wants) {
+    if (had) {
+      await removeCalendarEvent(task.calendarEventId);
+      annotateTask(task.id, { calendarEventId: null });
+    }
+    return;
+  }
+  if (!calendarActive()) return;
+  const changed = !before || before.due !== task.due || before.time !== task.time || before.title !== task.title
+    || before.durationMin !== task.durationMin || before.notes !== task.notes;
+  if (had && !changed) return;
+
+  const start = localOffsetISO(task.due, task.time);
+  const endDate = new Date(fromISODate(task.due));
+  const [h, m] = task.time.split(':').map(Number);
+  endDate.setHours(h, m + (task.durationMin || 30), 0, 0);
+  const end = localOffsetISO(toISODate(endDate), toTimeString(endDate.getHours(), endDate.getMinutes()));
+  const reminders = [{ method: 'popup', minutes: 0 }];
+  if (state.settings.reminderLead > 0) reminders.unshift({ method: 'popup', minutes: state.settings.reminderLead });
+  const body = {
+    summary: task.title,
+    description: (task.notes ? task.notes + '\n\n' : '') + 'Reminder from Cadence.',
+    startTime: start,
+    endTime: end,
+    timeZone: timeZoneName(),
+    overrideReminders: reminders,
+    availability: 'AVAILABILITY_FREE',
+  };
+  try {
+    if (had) {
+      await state.mcp.callTool(CALENDAR_SERVER, 'update_event', { eventId: task.calendarEventId, ...body, notificationLevel: 'NONE' });
+    } else {
+      const result = await state.mcp.callTool(CALENDAR_SERVER, 'create_event', body);
+      const payload = result && result.payload;
+      const id = payload && typeof payload === 'object' ? payload.id : null;
+      if (id) annotateTask(task.id, { calendarEventId: String(id) });
+      state.calendar = 'connected';
+    }
+  } catch (e) {
+    handleCalendarError(e, had ? 'update the reminder' : 'set the reminder');
+  }
+}
+
+async function removeCalendarEvent(eventId) {
+  if (!state.mcp || !eventId) return;
+  try {
+    await state.mcp.callTool(CALENDAR_SERVER, 'delete_event', { eventId, notificationLevel: 'NONE' });
+  } catch (e) {
+    if (e && e.code === 'tool_error') return; // already gone
+    handleCalendarError(e, 'remove the reminder');
+  }
+}
+
+async function probeCalendar() {
+  if (!state.mcp) { state.calendar = 'unavailable'; return; }
+  try {
+    const { servers } = await state.mcp.listTools();
+    const cal = servers.find((s) => s.server === CALENDAR_SERVER);
+    if (!cal || !cal.tools.length) state.calendar = 'not_connected';
+    else if (cal.authStatus === 'needs_reauth') state.calendar = 'needs_reauth';
+    else state.calendar = 'connected';
+  } catch (e) {
+    handleCalendarError(e, 'check the connection');
+  }
+  if (state.view === 'settings') render();
+}
+
+// ---------------------------------------------------------------- feedback
+
+let toastTimer = null;
+function toast(text, { action, onAction, duration = 4500 } = {}) {
+  const box = el('toast');
+  el('toastText').textContent = text;
+  const btn = el('toastAction');
+  if (action) {
+    btn.textContent = action;
+    btn.hidden = false;
+    btn.onclick = () => { box.hidden = true; if (onAction) onAction(); };
+  } else {
+    btn.hidden = true;
+    btn.onclick = null;
+  }
+  box.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { box.hidden = true; }, duration);
+}
+
+function say(text) {
+  if (!state.settings.voiceFeedback || !speechSupported || !text) return;
+  const wasListening = state.listening;
+  if (wasListening) voice.pause();
+  speak(text, { lang: state.settings.language, onEnd: () => { if (wasListening) voice.resume(); } });
+}
+
+function showResult(html) {
+  const box = el('captureResult');
+  box.innerHTML = html;
+  box.hidden = false;
+}
+
+function resultCard(label, task) {
+  const calNote = task.calendarEventId ? ' · Calendar reminder set' : '';
+  return `<div class="result-card"><span class="result-label">${esc(label)}</span><div><div class="result-title">${esc(task.title)}</div><div class="result-meta">${esc(describeTask(task)) || 'No date'}${esc(calNote)}</div></div></div>`;
+}
+
+// Custom confirmation sheet (window.confirm is not available inside the viewer).
+let confirmResolve = null;
+function confirmAction({ title = 'Are you sure?', message = '', okLabel = 'Delete', danger = true } = {}) {
+  el('confirmTitle').textContent = title;
+  el('confirmText').textContent = message;
+  const ok = el('confirmOk');
+  ok.textContent = okLabel;
+  ok.className = danger ? 'btn danger' : 'btn primary';
+  el('confirmSheet').hidden = false;
+  el('backdrop').hidden = false;
+  return new Promise((resolve) => { confirmResolve = resolve; });
+}
+function closeConfirm(result) {
+  el('confirmSheet').hidden = true;
+  if (el('captureSheet').hidden && el('taskSheet').hidden && el('profileSheet').hidden) el('backdrop').hidden = true;
+  if (confirmResolve) { confirmResolve(result); confirmResolve = null; }
+}
+
+// ---------------------------------------------------------------- Claude understanding
+
+function buildPrompt(text) {
+  const d = now();
+  const stamp = `${WEEKDAYS[d.getDay()]} ${toISODate(d)} ${toTimeString(d.getHours(), d.getMinutes())}`;
+  const open = openTasks().sort(sortTasks).slice(0, 80)
+    .map((t) => `${t.id} | ${t.title}${t.due ? ' | ' + t.due : ''}${t.time ? ' ' + t.time : ''}`).join('\n');
+  return `You are the command interpreter for a voice to-do app. The user spoke (speech-to-text, so expect typos and slang like "tmr") and you must turn it into JSON actions.
+
+Current local date and time: ${stamp} (time zone ${timeZoneName()}). Week starts Monday. "Tomorrow" is ${toISODate(addDays(d, 1))}.
+
+Open tasks (id | title | date time):
+${open || '(none)'}
+
+Reply with ONLY a JSON object of this shape:
+{"actions":[...], "say":"one short spoken confirmation"}
+
+Action types:
+- {"type":"add","tasks":[{"title":"Wash the car","due":"YYYY-MM-DD"|null,"time":"HH:MM"|null,"priority":"high"|"normal"|"low","tags":["work"],"repeat":null|"daily"|"weekdays"|"every2days"|"weekly"|"biweekly"|"monthly"|"yearly","durationMin":null|number,"notes":""}]}
+- {"type":"complete","id":"<task id>"}   also for "done with", "check off", "finished"
+- {"type":"reopen","id":"<task id>"}
+- {"type":"delete","id":"<task id>"}
+- {"type":"reschedule","id":"<task id>","due":"YYYY-MM-DD"|null,"time":"HH:MM"|null}
+- {"type":"setPriority","id":"<task id>","priority":"high"|"normal"|"low"}
+- {"type":"rename","id":"<task id>","title":"New title"}
+- {"type":"read","scope":"today"|"tomorrow"|"week"|"nextweek"|"overdue"|"all"|"date","date":"YYYY-MM-DD"}   when the user asks what they have
+- {"type":"navigate","view":"list"|"calendar"|"insights"|"settings"}
+- {"type":"clearCompleted"}
+- {"type":"undo"}
+- {"type":"none","reason":"why nothing could be done"}
+
+Rules:
+- Titles are short and imperative, in normal capitalisation, with all date, time and reminder words removed. "add wash the car at 8pm tmr night and remind me at 8" is ONE task: title "Wash the car", due tomorrow, time "20:00".
+- "Remind me to X at T" means task X with time T. A bare hour with no am/pm: 1-6 means afternoon or evening, 7-11 means morning, unless the words night, evening, tonight, morning or afternoon say otherwise. "Tonight" is today at 19:00 unless a time is given.
+- A time with no date means today if that time is still ahead, otherwise tomorrow.
+- Create several tasks only when the user clearly lists separate things ("and also", "and then", "plus").
+- For complete, delete, reschedule and similar, pick the open task whose title best matches what the user said. If nothing matches, use {"type":"none"}.
+- "say" is one natural sentence, like "Added wash the car, tomorrow at 8 PM." For read requests, list the tasks in "say".
+- Use 24-hour "HH:MM" for time and ISO dates.
+
+User said: "${text.replace(/"/g, '\\"')}"`;
+}
+
+function normalizeSmart(out) {
+  if (!out || typeof out !== 'object' || !Array.isArray(out.actions)) return null;
+  const byId = new Map(state.tasks.map((t) => [t.id, t]));
+  const actions = [];
+  for (const a of out.actions) {
+    if (!a || typeof a !== 'object' || typeof a.type !== 'string') continue;
+    const task = a.id ? byId.get(String(a.id)) : null;
+    switch (a.type) {
+      case 'add': {
+        const tasks = (Array.isArray(a.tasks) ? a.tasks : []).map((t) => ({
+          title: String(t.title || '').trim(),
+          due: /^\d{4}-\d{2}-\d{2}$/.test(String(t.due || '')) ? t.due : null,
+          time: /^\d{2}:\d{2}$/.test(String(t.time || '')) ? t.time : null,
+          priority: ['high', 'normal', 'low'].includes(t.priority) ? t.priority : 'normal',
+          tags: Array.isArray(t.tags) ? t.tags.map((x) => String(x).toLowerCase().replace(/^#/, '')).filter(Boolean) : [],
+          repeat: REPEAT_LABELS[t.repeat] ? t.repeat : null,
+          durationMin: Number(t.durationMin) > 0 ? Math.round(Number(t.durationMin)) : null,
+          notes: String(t.notes || '').trim(),
+        })).filter((t) => t.title);
+        if (tasks.length) actions.push({ type: 'add', tasks });
+        break;
+      }
+      case 'complete': case 'reopen': case 'delete': case 'setPriority': case 'rename':
+        if (task) actions.push({ ...a, task });
+        else if (a.query) actions.push({ ...a, query: String(a.query) });
+        break;
+      case 'reschedule':
+        if (task) actions.push({ type: 'reschedule', task, due: /^\d{4}-\d{2}-\d{2}$/.test(String(a.due || '')) ? a.due : null, time: /^\d{2}:\d{2}$/.test(String(a.time || '')) ? a.time : null });
+        break;
+      case 'read': case 'navigate': case 'clearCompleted': case 'undo': case 'none':
+        actions.push(a);
+        break;
+      default: break;
+    }
+  }
+  return { actions, say: typeof out.say === 'string' ? out.say.trim() : '' };
+}
+
+async function smartParse(text) {
+  if (!state.sample || !state.settings.smartParsing || state.smart === 'off') return null;
+  try {
+    const out = await state.sample.json(buildPrompt(text), { modelTier: 'quick', cache: false });
+    const norm = normalizeSmart(out);
+    if (norm) state.smart = 'on';
+    return norm;
+  } catch (e) {
+    const code = e && e.code;
+    if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].includes(code)) {
+      state.smart = 'off';
+      toast('Claude is not available here, so the built-in understanding is used instead.', { duration: 6000 });
+    } else if (code === 'rate_limited') {
+      toast('Claude is busy right now. Using the built-in understanding for this one.', { duration: 5000 });
+    } else if (code !== 'cancelled') {
+      toast('Claude did not answer, so the built-in understanding was used.', { duration: 5000 });
+    }
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------- command handling
+
+const LOCAL_ONLY = new Set(['navigate', 'undo', 'redo', 'stop', 'theme', 'search']);
+
+async function handleInput(raw, source = 'text') {
+  const text = String(raw || '').trim();
+  if (!text) return;
+  const local = parseInput(text, now());
+  if (LOCAL_ONLY.has(local.type)) { await applyCommand(local); return; }
+
+  let cmds = null;
+  let sayText = '';
+  if (state.sample && state.settings.smartParsing && state.smart !== 'off') {
+    setThinking(true);
+    const smart = await smartParse(text);
+    setThinking(false);
+    if (smart && smart.actions.length) { cmds = smart.actions; sayText = smart.say; }
+    else if (smart && !smart.actions.length) { cmds = [{ type: 'none', reason: smart.say || 'Nothing to do' }]; sayText = smart.say; }
+  }
+  if (!cmds) cmds = [local];
+
+  let replies = [];
+  for (const cmd of cmds) {
+    const r = await applyCommand(cmd);
+    if (r) replies.push(r);
+  }
+  const spoken = sayText || replies.join('. ');
+  if (spoken) say(spoken);
+}
+
+function setThinking(on) {
+  state.thinking = on;
+  el('captureDot').classList.toggle('thinking', on);
+  if (on) {
+    el('captureStatus').textContent = 'Understanding';
+    el('transcript').classList.add('thinking');
+  } else {
+    el('transcript').classList.remove('thinking');
+    renderMicState('Ready');
+  }
+}
+
+async function applyCommand(cmd) {
+  const resolveTask = (c, { includeCompleted = false } = {}) => {
+    if (c.task) return state.tasks.find((t) => t.id === c.task.id) || null;
+    if (c.query) { const m = findTask(c.query, { includeCompleted }); return m ? m.task : null; }
+    return null;
+  };
+  const notFound = (q) => { showResult(`<p class="muted">No task matches "${esc(q || 'that')}".</p>`); return `I couldn't find a task matching ${q || 'that'}`; };
+
+  switch (cmd.type) {
+    case 'noop':
+    case 'none':
+      showResult(`<p class="muted">${esc(cmd.reason || 'Nothing to add from that.')}</p>`);
+      return cmd.reason || '';
+
+    case 'add': {
+      if (state.settings.confirmBeforeAdd) {
+        state.pending = cmd.tasks;
+        renderPending();
+        return cmd.tasks.length === 1 ? `Ready to save ${cmd.tasks[0].title}. Confirm?` : `Ready to save ${cmd.tasks.length} tasks.`;
+      }
+      const created = addTasks(cmd.tasks, 'voice');
+      showResult(created.map((t) => resultCard('Added', t)).join(''));
+      toast(created.length === 1 ? `Added "${created[0].title}"` : `Added ${created.length} tasks`, { action: 'Undo', onAction: undo });
+      return created.length === 1 ? `Added ${spokenTask(created[0])}` : `Added ${created.length} tasks`;
+    }
+
+    case 'complete': {
+      const t = resolveTask(cmd);
+      if (!t) return notFound(cmd.query);
+      completeTask(t);
+      showResult(resultCard('Completed', t));
+      toast(`Completed "${t.title}"`, { action: 'Undo', onAction: undo });
+      return `Completed ${t.title}`;
+    }
+
+    case 'completeAll': {
+      const due = openTasks().filter((t) => t.due && t.due <= todayISO());
+      if (!due.length) return 'Nothing due today';
+      commit(() => { due.forEach((t) => { const x = state.tasks.find((y) => y.id === t.id); if (x) x.completedAt = new Date().toISOString(); }); });
+      toast(`Completed ${due.length} tasks`, { action: 'Undo', onAction: undo });
+      return `Completed ${due.length} tasks due today`;
+    }
+
+    case 'reopen': {
+      const t = cmd.task ? state.tasks.find((x) => x.id === cmd.task.id) : (findBestMatch(cmd.query || '', completedTasks()) || {}).task;
+      if (!t) return `No completed task matches ${cmd.query || 'that'}`;
+      reopenTask(t);
+      toast(`Reopened "${t.title}"`, { action: 'Undo', onAction: undo });
+      return `Reopened ${t.title}`;
+    }
+
+    case 'delete': {
+      const t = resolveTask(cmd, { includeCompleted: true });
+      if (!t) return notFound(cmd.query);
+      deleteTask(t);
+      showResult(resultCard('Deleted', t));
+      toast(`Deleted "${t.title}"`, { action: 'Undo', onAction: undo });
+      return `Deleted ${t.title}`;
+    }
+
+    case 'deleteAll': {
+      const ok = await confirmAction({ title: 'Delete every task?', message: `This removes all ${state.tasks.length} tasks permanently. You can undo right after.`, okLabel: 'Delete all' });
+      if (!ok) return 'Cancelled';
+      commit(() => { state.tasks = []; });
+      toast('Deleted all tasks', { action: 'Undo', onAction: undo, duration: 8000 });
+      return 'Deleted everything';
+    }
+
+    case 'reschedule': {
+      const t = resolveTask(cmd);
+      if (!t) return notFound(cmd.query);
+      const patch = {};
+      if (cmd.byDays) patch.due = toISODate(addDays(fromISODate(t.due) || now(), cmd.byDays));
+      if (cmd.due) patch.due = cmd.due;
+      if (cmd.time) { patch.time = cmd.time; if (!patch.due && !t.due) patch.due = todayISO(); }
+      patchTask(t, patch);
+      const updated = state.tasks.find((x) => x.id === t.id);
+      showResult(resultCard('Rescheduled', updated));
+      toast(`Moved "${updated.title}" to ${formatDate(updated.due, now())}`, { action: 'Undo', onAction: undo });
+      return `Moved ${spokenTask(updated)}`;
+    }
+
+    case 'setPriority': {
+      const t = resolveTask(cmd);
+      if (!t) return notFound(cmd.query);
+      patchTask(t, { priority: cmd.priority });
+      toast(`${t.title}: ${cmd.priority} priority`, { action: 'Undo', onAction: undo });
+      return `${t.title} is now ${cmd.priority} priority`;
+    }
+
+    case 'rename': {
+      const t = resolveTask(cmd);
+      if (!t) return notFound(cmd.query);
+      patchTask(t, { title: cmd.title });
+      toast(`Renamed to "${cmd.title}"`, { action: 'Undo', onAction: undo });
+      return `Renamed to ${cmd.title}`;
+    }
+
+    case 'clearCompleted': {
+      const n = completedTasks().length;
+      if (!n) return 'No completed tasks to clear';
+      const ok = await confirmAction({ title: 'Clear completed tasks?', message: `${n} completed ${n === 1 ? 'task' : 'tasks'} will be removed permanently.`, okLabel: 'Clear' });
+      if (!ok) return 'Cancelled';
+      commit(() => { state.tasks = openTasks(); });
+      toast(`Cleared ${n} completed`, { action: 'Undo', onAction: undo });
+      return `Cleared ${n} completed tasks`;
+    }
+
+    case 'navigate': {
+      if (cmd.view === 'today' || cmd.view === 'tomorrow') {
+        state.selectedDate = toISODate(addDays(now(), cmd.view === 'today' ? 0 : 1));
+        const d = fromISODate(state.selectedDate);
+        state.calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+        setView('calendar');
+      } else if (cmd.view === 'overdue') { state.listFilter = 'overdue'; setView('list'); }
+      else if (cmd.view === 'completed') { state.completedOpen = true; state.listFilter = 'all'; setView('list'); }
+      else setView(cmd.view);
+      closeCapture();
+      return '';
+    }
+
+    case 'theme':
+      updateSettings({ theme: cmd.theme });
+      toast(`${cap(cmd.theme)} theme`);
+      return '';
+
+    case 'read': {
+      const { text: readText, html } = readBack(cmd);
+      showResult(html);
+      return readText;
+    }
+
+    case 'search':
+      state.search = cmd.query;
+      el('searchInput').value = cmd.query;
+      el('searchBar').hidden = !cmd.query;
+      setView('list');
+      closeCapture();
+      return '';
+
+    case 'undo': undo(); return 'Undone';
+    case 'redo': redo(); return '';
+    case 'stop': stopListening(); closeCapture(); return '';
+    default: return '';
+  }
+}
+
+function readBack(cmd) {
+  const t = todayISO();
+  let list = [];
+  let label = '';
+  if (cmd.scope === 'today') { list = openTasks().filter((x) => x.due && x.due <= t); label = 'today'; }
+  else if (cmd.scope === 'tomorrow') { const d = toISODate(addDays(now(), 1)); list = openTasks().filter((x) => x.due === d); label = 'tomorrow'; }
+  else if (cmd.scope === 'week') { const end = toISODate(addDays(now(), 6)); list = openTasks().filter((x) => x.due && x.due <= end); label = 'this week'; }
+  else if (cmd.scope === 'nextweek') { const s = toISODate(addDays(now(), 7)); const e = toISODate(addDays(now(), 13)); list = openTasks().filter((x) => x.due && x.due >= s && x.due <= e); label = 'next week'; }
+  else if (cmd.scope === 'overdue') { list = openTasks().filter(isOverdue); label = 'overdue'; }
+  else if (cmd.scope === 'date' && cmd.date) { list = openTasks().filter((x) => x.due === cmd.date); label = 'on ' + formatDate(cmd.date, now()); }
+  else { list = openTasks(); label = 'in total'; }
+  list = list.slice().sort(sortTasks);
+  const withDate = !['today', 'tomorrow', 'date'].includes(cmd.scope);
+  let text;
+  if (!list.length) text = `Nothing ${label === 'in total' ? 'open' : label}.`;
+  else {
+    const head = list.slice(0, 8).map((x) => spokenTask(x, { withDate }));
+    const more = list.length > 8 ? `, and ${list.length - 8} more` : '';
+    text = `${list.length === 1 ? 'One task' : list.length + ' tasks'} ${label}: ${head.join('; ')}${more}.`;
+  }
+  const html = `<p class="result-heading">${esc(cap(label === 'in total' ? 'Everything open' : label))}</p>` +
+    (list.length ? `<ul class="result-list">${list.map((x) => `<li><span>${esc(x.title)}</span><span class="muted">${esc(describeTask(x, { withDate }))}</span></li>`).join('')}</ul>` : '<p class="muted">Nothing here.</p>');
+  return { text, html };
+}
+
+function renderPending() {
+  if (!state.pending) return;
+  showResult(`
+    <p class="result-heading">Review before saving</p>
+    ${state.pending.map((t, i) => `<div class="result-card"><span class="result-label">${i + 1}</span><div><div class="result-title">${esc(t.title)}</div><div class="result-meta">${esc(describeTask({ ...t, tags: t.tags || [] })) || 'No date'}</div></div></div>`).join('')}
+    <div class="pending-actions">
+      <button class="btn primary" data-pending="save">Save</button>
+      <button class="btn secondary" data-pending="edit">Edit</button>
+      <button class="btn text" data-pending="discard">Discard</button>
+    </div>`);
+}
+
+// ---------------------------------------------------------------- voice
+
+const voice = new VoiceInput({
+  lang: state.settings.language,
+  onStart: () => { state.listening = true; renderMicState('Listening'); },
+  onInterim: (text) => { el('transcript').textContent = text; el('transcript').classList.add('interim'); },
+  onFinal: (text) => {
+    el('transcript').textContent = text;
+    el('transcript').classList.remove('interim');
+    if (!state.settings.continuous) voice.stop();
+    handleInput(text, 'voice');
+  },
+  onEnd: () => { state.listening = false; if (!state.thinking) renderMicState('Ready'); },
+  onError: (err) => {
+    state.listening = false;
+    const messages = {
+      unsupported: 'Voice input is not supported in this browser. You can type instead.',
+      'not-allowed': 'The microphone is blocked here. Allow it for this page in your browser settings, or type instead.',
+      'service-not-allowed': 'Speech recognition is unavailable here. Try Chrome or Safari, or type instead.',
+      'audio-capture': 'No microphone was found.',
+      network: 'Speech recognition needs a network connection on this device.',
+    };
+    renderMicState('Ready');
+    toast(messages[err] || `Voice error: ${err}`, { duration: 7000 });
+  },
+});
+
+function renderMicState(status) {
+  const listening = state.listening;
+  el('micBtn').classList.toggle('active', listening);
+  el('micBtn').setAttribute('aria-pressed', String(listening));
+  el('captureStatus').textContent = listening ? (state.settings.continuous ? 'Listening continuously' : 'Listening') : status;
+  el('captureDot').classList.toggle('live', listening);
+  el('captureMic').textContent = listening ? 'Stop listening' : 'Start listening';
+  if (!listening) el('transcript').classList.remove('interim');
+}
+
+function startListening() {
+  if (!voiceSupported) {
+    openCapture({ focusInput: true });
+    toast('Voice input is not available in this browser. You can type instead.', { duration: 6000 });
+    return;
+  }
+  openCapture();
+  stopSpeaking();
+  el('transcript').textContent = state.settings.continuous ? 'Listening. Say tasks one after another.' : 'Listening.';
+  el('transcript').classList.add('interim');
+  maybeBrief(() => voice.start({ continuous: state.settings.continuous }));
+}
+
+function stopListening() {
+  voice.stop();
+  state.listening = false;
+  renderMicState('Ready');
+}
+
+function maybeBrief(then) {
+  const t = todayISO();
+  if (state.settings.morningBriefing && state.briefedOn !== t && speechSupported) {
+    state.briefedOn = t;
+    localStorage.setItem('cadence.briefedOn', t);
+    const { text, html } = readBack({ scope: 'today' });
+    showResult(html);
+    speak(`Good ${now().getHours() < 12 ? 'morning' : now().getHours() < 18 ? 'afternoon' : 'evening'}. ${text}`, { lang: state.settings.language, onEnd: then });
+  } else {
+    then();
+  }
+}
+
+// ---------------------------------------------------------------- sheets
+
+function anySheetOpen() {
+  return ['captureSheet', 'taskSheet', 'profileSheet', 'confirmSheet'].some((id) => !el(id).hidden);
+}
+
+function openCapture({ focusInput = false } = {}) {
+  el('captureSheet').hidden = false;
+  el('backdrop').hidden = false;
+  el('captureContext').textContent = state.view === 'calendar' && state.selectedDate !== todayISO() ? `Adding to ${formatDate(state.selectedDate, now())}` : '';
+  if (focusInput) setTimeout(() => el('typeInput').focus(), 50);
+}
+
+function closeCapture() {
+  el('captureSheet').hidden = true;
+  el('captureResult').hidden = true;
+  state.pending = null;
+  if (state.listening) stopListening();
+  if (!anySheetOpen()) el('backdrop').hidden = true;
+}
+
+function openTaskSheet(task) {
+  state.editingId = task ? task.id : null;
+  const exists = Boolean(task && state.tasks.some((x) => x.id === task.id));
+  el('taskSheetTitle').textContent = exists ? 'Edit task' : 'New task';
+  const t = task || { title: '', due: null, time: null, priority: 'normal', repeat: null, durationMin: null, tags: [], notes: '' };
+  el('tTitle').value = t.title;
+  el('tDate').value = t.due || '';
+  el('tTime').value = t.time || '';
+  document.querySelector(`#tPriority input[value="${t.priority}"]`).checked = true;
+  el('tRepeat').value = t.repeat || '';
+  el('tDuration').value = t.durationMin || '';
+  el('tTags').value = (t.tags || []).join(', ');
+  el('tNotes').value = t.notes || '';
+  el('taskDelete').hidden = !exists;
+  el('taskComplete').hidden = !exists || Boolean(task.completedAt);
+  const note = el('taskCalendarNote');
+  if (exists && task.calendarEventId) { note.hidden = false; note.textContent = 'A reminder for this task is in your Google Calendar. It moves when you change the date or time.'; }
+  else note.hidden = true;
+  el('taskSheet').hidden = false;
+  el('backdrop').hidden = false;
+}
+
+function closeTaskSheet() {
+  el('taskSheet').hidden = true;
+  state.editingId = null;
+  if (!anySheetOpen()) el('backdrop').hidden = true;
+}
+
+function readTaskSheet() {
+  const title = el('tTitle').value.trim();
+  const due = el('tDate').value || null;
+  let time = el('tTime').value || null;
+  if (time && time.length > 5) time = time.slice(0, 5);
+  return {
+    title,
+    due: due || (time ? todayISO() : null),
+    time,
+    priority: document.querySelector('#tPriority input:checked').value,
+    repeat: el('tRepeat').value || null,
+    durationMin: Number(el('tDuration').value) || null,
+    tags: el('tTags').value.split(/[,\s]+/).map((x) => x.replace(/^#/, '').trim().toLowerCase()).filter(Boolean),
+    notes: el('tNotes').value.trim(),
+  };
+}
+
+function saveTaskSheet() {
+  const fields = readTaskSheet();
+  if (!fields.title) { el('tTitle').focus(); return; }
+  const existing = state.editingId && state.tasks.find((t) => t.id === state.editingId);
+  if (existing) { patchTask(existing, fields); toast('Saved', { action: 'Undo', onAction: undo }); }
+  else { addTasks([fields], 'text'); toast(`Added "${fields.title}"`, { action: 'Undo', onAction: undo }); }
+  closeTaskSheet();
+}
+
+// ---------------------------------------------------------------- profiles (who is using the page)
+
+function slugify(name) {
+  const s = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  return s || 'me';
+}
+
+function rememberProfile(p) {
+  state.profile = p;
+  try { localStorage.setItem('cadence.profile', JSON.stringify(p)); } catch { /* ignore */ }
+}
+
+function savedProfile() {
+  try { return JSON.parse(localStorage.getItem('cadence.profile') || 'null'); } catch { return null; }
+}
+
+async function listProfiles() {
+  try {
+    const snap = await state.db.collection('profiles').limit(200).get();
+    return snap.docs.filter((d) => d.exists).map((d) => ({ slug: d.id, ...(d.data() || {}) }));
+  } catch { return []; }
+}
+
+let profileMode = { step: 'pick', pending: null };
+
+async function showProfileSheet() {
+  profileMode = { step: 'pick', pending: null };
+  el('profileTitle').textContent = 'Who is this?';
+  el('profileHint').textContent = 'Each person keeps their own list on this page. Pick your name or add a new one.';
+  el('pName').value = '';
+  el('pPin').value = '';
+  el('pPin').required = false;
+  el('pPinLabel').textContent = 'PIN (optional, protects your list)';
+  el('profileError').hidden = true;
+  el('profileBack').hidden = true;
+  el('pName').parentElement.hidden = false;
+  el('profileSheet').hidden = false;
+  el('backdrop').hidden = false;
+  el('backdrop').classList.add('hard');
+  const list = el('profileList');
+  list.innerHTML = '';
+  const profiles = await listProfiles();
+  profiles.sort((a, b) => String(a.name || a.slug).localeCompare(String(b.name || b.slug)));
+  list.innerHTML = profiles.map((p) => `<button type="button" class="profile-item" data-slug="${esc(p.slug)}"><svg><use href="#i-user"/></svg>${esc(p.name || p.slug)}${p.pinHash ? '<span class="muted">PIN</span>' : ''}</button>`).join('');
+}
+
+async function submitProfile() {
+  const name = el('pName').value.trim();
+  const pin = el('pPin').value.trim();
+  const errBox = el('profileError');
+  errBox.hidden = true;
+  if (profileMode.step === 'pin') {
+    const p = profileMode.pending;
+    if (!pin) { errBox.textContent = 'Enter the PIN for this list.'; errBox.hidden = false; return; }
+    if ((await sha256(pin)) !== p.pinHash) { errBox.textContent = 'That PIN does not match.'; errBox.hidden = false; return; }
+    await openProfile({ slug: p.slug, name: p.name });
+    return;
+  }
+  if (!name) { errBox.textContent = 'Enter a name.'; errBox.hidden = false; return; }
+  if (pin && !/^\d{4,8}$/.test(pin)) { errBox.textContent = 'A PIN is 4 to 8 digits.'; errBox.hidden = false; return; }
+  const slug = slugify(name);
+  const ref = state.db.doc(`profiles/${slug}`);
+  let existing = null;
+  try { const snap = await ref.get(); existing = snap.exists ? snap.data() : null; } catch { existing = null; }
+  if (existing) {
+    if (existing.pinHash) { askPin({ slug, name: existing.name || name, pinHash: existing.pinHash }); return; }
+    await openProfile({ slug, name: existing.name || name });
+    return;
+  }
+  try {
+    await ref.set({ name, pinHash: pin ? await sha256(pin) : null, createdAt: new Date().toISOString(), settings: state.settings });
+  } catch (e) {
+    errBox.textContent = 'Could not create the profile. Check your connection and try again.';
+    errBox.hidden = false;
+    return;
+  }
+  await openProfile({ slug, name });
+}
+
+function askPin(p) {
+  profileMode = { step: 'pin', pending: p };
+  el('profileTitle').textContent = `PIN for ${p.name}`;
+  el('profileHint').textContent = 'This list is protected. Enter its PIN to open it.';
+  el('pName').parentElement.hidden = true;
+  el('pPin').value = '';
+  el('pPin').required = true;
+  el('pPinLabel').textContent = 'PIN';
+  el('profileBack').hidden = false;
+  el('profileError').hidden = true;
+  setTimeout(() => el('pPin').focus(), 50);
+}
+
+async function openProfile(p) {
+  if (state.unsubscribe) { state.unsubscribe(); state.unsubscribe = null; }
+  rememberProfile(p);
+  el('profileSheet').hidden = true;
+  el('backdrop').classList.remove('hard');
+  if (!anySheetOpen()) el('backdrop').hidden = true;
+  state.undo = [];
+  state.redo = [];
+  state.remoteReady = false;
+  // Settings stored with the profile win over the device copy.
+  try {
+    const snap = await state.db.doc(`profiles/${p.slug}`).get();
+    const data = snap.exists ? snap.data() : null;
+    if (data && data.settings) { state.settings = { ...ARTIFACT_DEFAULTS, ...data.settings }; saveSettings(state.settings); applyTheme(); }
+  } catch { /* keep device settings */ }
+  const col = state.db.collection(`profiles/${p.slug}/tasks`);
+  state.unsubscribe = col.onSnapshot((snap) => {
+    const remote = snap.docs.filter((d) => d.exists).map((d) => sanitizeTaskWithCalendar(d.data()));
+    if (!state.remoteReady && remote.length === 0 && state.tasks.length && !localStorage.getItem('cadence.migrated.' + p.slug)) {
+      // First open on this device with tasks that were only stored locally: move them into the profile.
+      const local = state.tasks;
+      localStorage.setItem('cadence.migrated.' + p.slug, '1');
+      Promise.allSettled(local.map((t) => col.doc(t.id).set(t))).then(() => { state.remoteReady = true; });
+      return;
+    }
+    state.remoteReady = true;
+    state.tasks = remote;
+    saveTasks(state.tasks);
+    render();
+  }, (e) => {
+    if (e && e.code === 'revoked') toast('Access to the shared list ended. Reload the page to continue.', { duration: 8000 });
+  });
+  render();
+}
+
+function sanitizeTaskWithCalendar(raw) {
+  const t = sanitizeTask(raw);
+  t.calendarEventId = raw.calendarEventId ? String(raw.calendarEventId) : null;
+  return t;
+}
+
+// ---------------------------------------------------------------- rendering
+
+const VIEW_TITLES = { list: 'Tasks', calendar: 'Calendar', insights: 'Insights', settings: 'Settings' };
+
+function setView(view) {
+  if (!VIEW_TITLES[view]) return;
+  state.view = view;
+  render();
+  el('view').scrollTop = 0;
+}
+
+function render() {
+  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
+  el('viewTitle').textContent = VIEW_TITLES[state.view];
+  el('undoBtn').hidden = !state.undo.length;
+  const open = openTasks();
+  const dueToday = open.filter((t) => t.due && t.due <= todayISO()).length;
+  const who = state.profile ? ` · ${state.profile.name}` : '';
+  const subtitle = {
+    list: (open.length ? `${open.length} open · ${dueToday} due today` : 'Nothing open. Tap the microphone to add a task.') + who,
+    calendar: formatLongDate(state.selectedDate),
+    insights: 'Your last 30 days' + who,
+    settings: `Cadence ${APP_VERSION}${who}`,
+  }[state.view];
+  el('viewSubtitle').textContent = subtitle;
+  const v = el('view');
+  if (state.view === 'list') v.innerHTML = renderList();
+  else if (state.view === 'calendar') v.innerHTML = renderCalendar();
+  else if (state.view === 'insights') v.innerHTML = renderInsights();
+  else v.innerHTML = renderSettings();
+  el('searchBtn').classList.toggle('active', Boolean(state.search));
+}
+
+function taskRow(task, { showDate = true } = {}) {
+  const overdue = isOverdue(task);
+  const meta = [];
+  if (showDate && task.due) meta.push(`<span class="${overdue ? 'overdue' : ''}">${esc(formatDate(task.due, now()))}</span>`);
+  if (task.time) meta.push(`<span class="${overdue ? 'overdue' : ''}">${esc(formatTime(task.time, state.settings.hour12))}</span>`);
+  if (task.durationMin) meta.push(`<span>${esc(formatDuration(task.durationMin))}</span>`);
+  if (task.repeat) meta.push(`<span class="with-icon"><svg><use href="#i-repeat"/></svg>${esc(REPEAT_LABELS[task.repeat])}</span>`);
+  if (task.calendarEventId && !task.completedAt) meta.push('<span class="with-icon" title="Reminder in Google Calendar"><svg><use href="#i-bell"/></svg>Reminder</span>');
+  task.tags.forEach((t) => meta.push(`<span class="tag">${esc(t)}</span>`));
+  if (task.notes) meta.push(`<span class="muted">${esc(task.notes.length > 60 ? task.notes.slice(0, 60) + '…' : task.notes)}</span>`);
+  return `<li class="task prio-${task.priority} ${task.completedAt ? 'done' : ''}" data-id="${task.id}">
+    <button class="check" data-action="toggle" aria-label="${task.completedAt ? 'Reopen' : 'Complete'} ${esc(task.title)}"><svg><use href="#i-check"/></svg></button>
+    <div class="task-body" data-action="edit">
+      <div class="task-title">${esc(task.title)}</div>
+      ${meta.length ? `<div class="task-meta">${meta.join('<i class="sep"></i>')}</div>` : ''}
+    </div>
+  </li>`;
+}
+
+function renderList() {
+  const t = todayISO();
+  const tomorrow = toISODate(addDays(now(), 1));
+  const weekEnd = toISODate(addDays(now(), 6));
+  let open = openTasks().filter((x) => matchesSearch(x, state.search));
+  const allTags = [...new Set(openTasks().flatMap((x) => x.tags))].sort();
+  const f = state.listFilter;
+  if (f === 'today') open = open.filter((x) => x.due && x.due <= t);
+  else if (f === 'upcoming') open = open.filter((x) => x.due && x.due > t);
+  else if (f === 'nodate') open = open.filter((x) => !x.due);
+  else if (f === 'high') open = open.filter((x) => x.priority === 'high');
+  else if (f === 'overdue') open = open.filter(isOverdue);
+  else if (f.startsWith('tag:')) open = open.filter((x) => x.tags.includes(f.slice(4)));
+
+  const chips = [['all', 'All'], ['today', 'Today'], ['upcoming', 'Upcoming'], ['high', 'High priority'], ['nodate', 'No date'], ...allTags.map((tag) => ['tag:' + tag, '#' + tag])];
+  const chipsHtml = `<div class="chips" role="tablist">${chips.map(([k, label]) => `<button class="chip ${f === k ? 'active' : ''}" data-filter="${esc(k)}" role="tab">${esc(label)}</button>`).join('')}</div>`;
+
+  const groups = [
+    { key: 'overdue', label: 'Overdue', items: [] }, { key: 'today', label: 'Today', items: [] }, { key: 'tomorrow', label: 'Tomorrow', items: [] },
+    { key: 'week', label: 'Next 7 days', items: [] }, { key: 'later', label: 'Later', items: [] }, { key: 'nodate', label: 'No date', items: [] },
+  ];
+  for (const task of open.sort(sortTasks)) {
+    if (!task.due) groups[5].items.push(task);
+    else if (isOverdue(task) && task.due < t) groups[0].items.push(task);
+    else if (task.due === t) groups[1].items.push(task);
+    else if (task.due === tomorrow) groups[2].items.push(task);
+    else if (task.due <= weekEnd) groups[3].items.push(task);
+    else groups[4].items.push(task);
+  }
+  let body = groups.filter((g) => g.items.length).map((g) => `
+    <section class="group">
+      <h2 class="group-title">${g.label}<span class="count">${g.items.length}</span></h2>
+      <ul class="tasks">${g.items.map((x) => taskRow(x, { showDate: !['today', 'tomorrow'].includes(g.key) })).join('')}</ul>
+    </section>`).join('');
+  if (!body) {
+    body = `<div class="empty">
+      <p class="empty-title">${state.search || f !== 'all' ? 'No matching tasks' : 'Nothing here yet'}</p>
+      <p class="muted">${state.search || f !== 'all' ? 'Try a different filter or search.' : 'Tap the microphone and say something like "Remind me tomorrow at 8 pm to wash the dishes".'}</p>
+    </div>`;
+  }
+  const done = completedTasks().filter((x) => matchesSearch(x, state.search)).sort((a, b) => (a.completedAt < b.completedAt ? 1 : -1));
+  const doneHtml = state.settings.showCompleted && done.length ? `
+    <section class="group completed-group">
+      <button class="group-title toggle" data-action="toggle-completed" aria-expanded="${state.completedOpen}">Completed<span class="count">${done.length}</span><svg class="chev ${state.completedOpen ? 'open' : ''}"><use href="#i-right"/></svg></button>
+      ${state.completedOpen ? `<ul class="tasks">${done.slice(0, 50).map((x) => taskRow(x)).join('')}</ul><button class="btn text small" data-action="clear-completed">Clear completed</button>` : ''}
+    </section>` : '';
+  return chipsHtml + body + doneHtml;
+}
+
+function renderCalendar() {
+  const m = state.calMonth;
+  const year = m.getFullYear();
+  const month = m.getMonth();
+  const first = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const weekStart = state.settings.weekStart;
+  const lead = (first.getDay() - weekStart + 7) % 7;
+  const t = todayISO();
+  const counts = {};
+  for (const task of state.tasks) {
+    if (!task.due) continue;
+    counts[task.due] = counts[task.due] || { open: 0, high: 0, done: 0 };
+    if (task.completedAt) counts[task.due].done += 1;
+    else { counts[task.due].open += 1; if (task.priority === 'high') counts[task.due].high += 1; }
+  }
+  const headers = [];
+  for (let i = 0; i < 7; i += 1) headers.push(`<div class="dow">${WEEKDAYS_SHORT[(weekStart + i) % 7]}</div>`);
+  const cells = [];
+  const startDate = addDays(first, -lead);
+  const total = Math.ceil((lead + daysInMonth) / 7) * 7;
+  for (let i = 0; i < total; i += 1) {
+    const d = addDays(startDate, i);
+    const iso = toISODate(d);
+    const inMonth = d.getMonth() === month;
+    const c = counts[iso];
+    const dots = c ? `<div class="dots">${c.high ? '<i class="dot-high"></i>' : ''}${c.open - c.high > 0 ? '<i class="dot-open"></i>' : ''}${c.done && !c.open ? '<i class="dot-done"></i>' : ''}</div>` : '';
+    cells.push(`<button class="day ${inMonth ? '' : 'outside'} ${iso === t ? 'today' : ''} ${iso === state.selectedDate ? 'selected' : ''} ${iso < t ? 'past' : ''}" data-date="${iso}" aria-label="${esc(formatLongDate(iso))}${c ? `, ${c.open} open` : ''}">
+      <span class="num">${d.getDate()}</span>${dots}${c && c.open ? `<span class="badge">${c.open}</span>` : ''}
+    </button>`);
+  }
+  const dayTasks = tasksForDate(state.selectedDate);
+  const openForDay = dayTasks.filter((x) => !x.completedAt);
+  const doneForDay = dayTasks.filter((x) => x.completedAt);
+  const totalMin = openForDay.reduce((s, x) => s + (x.durationMin || 0), 0);
+  const agenda = `<section class="agenda">
+    <div class="agenda-head">
+      <h2>${esc(formatDate(state.selectedDate, now()))}<span class="muted"> ${esc(formatLongDate(state.selectedDate).split(', ')[1])}</span></h2>
+      <span class="muted">${openForDay.length ? `${openForDay.length} open${totalMin ? ' · ' + formatDuration(totalMin) + ' planned' : ''}` : 'Free'}</span>
+    </div>
+    ${openForDay.length ? `<ul class="tasks">${openForDay.map((x) => taskRow(x, { showDate: false })).join('')}</ul>` : '<p class="muted agenda-empty">Nothing scheduled. Speak or type a task while this day is selected to add it here.</p>'}
+    ${doneForDay.length ? `<ul class="tasks done-list">${doneForDay.map((x) => taskRow(x, { showDate: false })).join('')}</ul>` : ''}
+    <button class="btn secondary block" data-action="add-for-day">Add a task for this day</button>
+  </section>`;
+  return `<div class="cal">
+    <div class="cal-nav">
+      <button class="icon-btn" data-action="cal-prev" aria-label="Previous month"><svg><use href="#i-left"/></svg></button>
+      <h2>${cap(MONTHS[month])} ${year}</h2>
+      <button class="icon-btn" data-action="cal-next" aria-label="Next month"><svg><use href="#i-right"/></svg></button>
+      <button class="btn text small" data-action="cal-today">Today</button>
+    </div>
+    <div class="cal-grid" id="calGrid">${headers.join('')}${cells.join('')}</div>
+  </div>${agenda}`;
+}
+
+function renderInsights() {
+  const t = todayISO();
+  const open = openTasks();
+  const done = completedTasks();
+  const overdue = open.filter(isOverdue).length;
+  const dueToday = open.filter((x) => x.due && x.due <= t).length;
+  const weekAgo = toISODate(addDays(now(), -6));
+  const doneThisWeek = done.filter((x) => x.completedAt.slice(0, 10) >= weekAgo).length;
+  const monthAgo = toISODate(addDays(now(), -29));
+  const recent = state.tasks.filter((x) => (x.due && x.due >= monthAgo && x.due <= t) || (x.completedAt && x.completedAt.slice(0, 10) >= monthAgo));
+  const rate = recent.length ? Math.round((recent.filter((x) => x.completedAt).length / recent.length) * 100) : null;
+  const doneDays = new Set(done.map((x) => x.completedAt.slice(0, 10)));
+  let streak = 0;
+  let cursor = doneDays.has(t) ? now() : addDays(now(), -1);
+  while (doneDays.has(toISODate(cursor))) { streak += 1; cursor = addDays(cursor, -1); }
+  const days = [];
+  for (let i = 13; i >= 0; i -= 1) {
+    const iso = toISODate(addDays(now(), -i));
+    days.push({ iso, n: done.filter((x) => x.completedAt.slice(0, 10) === iso).length });
+  }
+  const max = Math.max(1, ...days.map((d) => d.n));
+  const byDow = [0, 0, 0, 0, 0, 0, 0];
+  done.forEach((x) => { byDow[new Date(x.completedAt).getDay()] += 1; });
+  const bestDow = byDow.some(Boolean) ? WEEKDAYS[byDow.indexOf(Math.max(...byDow))] : null;
+  const tagCounts = {};
+  open.forEach((x) => x.tags.forEach((tag) => { tagCounts[tag] = (tagCounts[tag] || 0) + 1; }));
+  const tags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const tagMax = Math.max(1, ...tags.map((x) => x[1]));
+  const highOpen = open.filter((x) => x.priority === 'high').length;
+  const voiceShare = state.tasks.length ? Math.round((state.tasks.filter((x) => x.source === 'voice').length / state.tasks.length) * 100) : 0;
+  return `
+    <div class="stats">
+      <div class="stat"><span class="stat-n">${open.length}</span><span class="stat-l">Open</span></div>
+      <div class="stat"><span class="stat-n">${dueToday}</span><span class="stat-l">Due today</span></div>
+      <div class="stat ${overdue ? 'warn' : ''}"><span class="stat-n">${overdue}</span><span class="stat-l">Overdue</span></div>
+      <div class="stat"><span class="stat-n">${doneThisWeek}</span><span class="stat-l">Done this week</span></div>
+      <div class="stat"><span class="stat-n">${streak}</span><span class="stat-l">Day streak</span></div>
+      <div class="stat"><span class="stat-n">${rate === null ? '–' : rate + '%'}</span><span class="stat-l">Completion, 30 days</span></div>
+    </div>
+    <section class="panel">
+      <h2>Completed, last 14 days</h2>
+      <div class="bars" role="img" aria-label="Completed tasks per day for the last 14 days">
+        ${days.map((d) => `<div class="bar-col"><div class="bar ${d.n ? '' : 'zero'}" style="height:${Math.round((d.n / max) * 100)}%" title="${d.iso}: ${d.n}"></div><span class="bar-l">${d.iso === t ? 'T' : WEEKDAYS_SHORT[fromISODate(d.iso).getDay()][0]}</span></div>`).join('')}
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Open tasks by tag</h2>
+      ${tags.length ? tags.map(([tag, n]) => `<div class="hbar"><span class="hbar-l">#${esc(tag)}</span><div class="hbar-track"><div class="hbar-fill" style="width:${Math.round((n / tagMax) * 100)}%"></div></div><span class="hbar-n">${n}</span></div>`).join('') : '<p class="muted">Add tags by saying "tag work" at the end of a task.</p>'}
+    </section>
+    <section class="panel">
+      <h2>Patterns</h2>
+      <ul class="facts">
+        <li><span>Most productive day</span><strong>${bestDow ? cap(bestDow) : '–'}</strong></li>
+        <li><span>High priority open</span><strong>${highOpen}</strong></li>
+        <li><span>Added by voice</span><strong>${voiceShare}%</strong></li>
+        <li><span>Total completed</span><strong>${done.length}</strong></li>
+      </ul>
+    </section>`;
+}
+
+function renderSettings() {
+  const s = state.settings;
+  const sw = (key, label, hint = '') => `<label class="row"><div><span class="row-l">${label}</span>${hint ? `<span class="row-h">${hint}</span>` : ''}</div><input type="checkbox" class="switch" data-setting="${key}" ${s[key] ? 'checked' : ''}></label>`;
+  const langs = [['en-US', 'English (US)'], ['en-GB', 'English (UK)'], ['en-AU', 'English (Australia)'], ['en-IN', 'English (India)'], ['es-ES', 'Spanish'], ['fr-FR', 'French'], ['de-DE', 'German'], ['pt-BR', 'Portuguese (Brazil)'], ['it-IT', 'Italian'], ['nl-NL', 'Dutch']];
+
+  const smartPill = !state.capsResolved ? '<span class="pill">Checking</span>'
+    : !state.sample ? '<span class="pill warn">Unavailable here</span>'
+      : state.smart === 'off' ? '<span class="pill warn">Not allowed</span>'
+        : s.smartParsing ? '<span class="pill on">On</span>' : '<span class="pill">Off</span>';
+  const calPill = !state.capsResolved ? '<span class="pill">Checking</span>'
+    : !state.mcp || state.calendar === 'unavailable' ? '<span class="pill warn">Unavailable here</span>'
+      : state.calendar === 'not_connected' ? '<span class="pill warn">Not connected</span>'
+        : state.calendar === 'needs_reauth' ? '<span class="pill warn">Reconnect needed</span>'
+          : state.calendar === 'blocked' ? '<span class="pill warn">Blocked</span>'
+            : s.calendarSync ? '<span class="pill on">Connected</span>' : '<span class="pill">Off</span>';
+  const calHint = state.calendar === 'not_connected' ? 'Add Google Calendar in claude.ai Settings, Connectors, then reload this page.'
+    : state.calendar === 'needs_reauth' ? 'Reconnect Google Calendar in claude.ai Settings, Connectors.'
+      : 'Every task with a time becomes a calendar event with an alert, so your phone rings even when this page is closed.';
+  const storagePill = !state.capsResolved ? '<span class="pill">Checking</span>' : state.db ? '<span class="pill on">Saved online</span>' : '<span class="pill warn">This device only</span>';
+
+  return `
+    <section class="panel">
+      <h2>Understanding</h2>
+      <div class="status-line"><div><span class="row-l">Claude${smartPill}</span><span class="row-h">${state.sample ? 'Uses your Claude account to understand what you say. Dates, times, priorities and commands are worked out in context.' : 'Open this page inside Claude to let Claude interpret what you say. The built-in understanding is used meanwhile.'}</span></div></div>
+      ${sw('smartParsing', 'Use Claude to understand speech', 'Turn off to use the faster built-in rules only')}
+      ${sw('confirmBeforeAdd', 'Review before saving', 'Show the understood task and ask before it is added')}
+    </section>
+    <section class="panel">
+      <h2>Reminders</h2>
+      <div class="status-line"><div><span class="row-l">Google Calendar${calPill}</span><span class="row-h">${calHint}</span></div></div>
+      ${sw('calendarSync', 'Put timed tasks in Google Calendar', 'Reminders arrive from the Calendar app, even with this page closed')}
+      <label class="row"><div><span class="row-l">Alert</span></div>
+        <select data-setting="reminderLead">${[0, 5, 10, 15, 30, 60].map((v) => `<option value="${v}" ${s.reminderLead === v ? 'selected' : ''}>${v === 0 ? 'At the time' : v + ' min before, and at the time'}</option>`).join('')}</select></label>
+      <p class="row-note">Tasks without a time do not get an alert. Say a time, such as "at 8 pm", to be reminded.</p>
+    </section>
+    <section class="panel">
+      <h2>Voice</h2>
+      ${sw('voiceFeedback', 'Spoken confirmations', 'Reads back what was added or changed')}
+      ${sw('continuous', 'Hands-free mode', 'Keep listening after each task until you say "stop"')}
+      ${sw('morningBriefing', 'Daily briefing', 'Reads today’s tasks the first time you tap the microphone each day')}
+      <label class="row"><div><span class="row-l">Recognition language</span></div>
+        <select data-setting="language">${langs.map(([v, l]) => `<option value="${v}" ${s.language === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <p class="row-note">${voiceSupported ? 'Voice input is available in this browser.' : 'Voice input is not supported in this browser. Chrome on Android and Safari on iPhone work best.'}</p>
+    </section>
+    <section class="panel">
+      <h2>Your list</h2>
+      <div class="status-line"><div><span class="row-l">${esc(state.profile ? state.profile.name : 'This device')}${storagePill}</span><span class="row-h">${state.db ? 'Your tasks are saved with your name on this page and stay until you delete them. Anyone you share the link with picks their own name and gets their own list.' : 'Tasks are saved in this browser only.'}</span></div></div>
+      ${state.db ? '<div class="btn-row"><button class="btn secondary small" data-action="switch-profile">Switch person</button><button class="btn secondary small" data-action="set-pin">Set or change PIN</button></div>' : ''}
+    </section>
+    <section class="panel">
+      <h2>Appearance</h2>
+      <div class="row"><div><span class="row-l">Theme</span></div>
+        <div class="segmented small">${['system', 'light', 'dark'].map((v) => `<label><input type="radio" name="theme" value="${v}" data-setting="theme" ${s.theme === v ? 'checked' : ''}><span>${cap(v)}</span></label>`).join('')}</div></div>
+      ${sw('hour12', '12-hour clock')}
+      <div class="row"><div><span class="row-l">Week starts on</span></div>
+        <div class="segmented small">${[[1, 'Monday'], [0, 'Sunday']].map(([v, l]) => `<label><input type="radio" name="weekStart" value="${v}" data-setting="weekStart" ${s.weekStart === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></div>
+      ${sw('showCompleted', 'Show completed section in list')}
+    </section>
+    <section class="panel">
+      <h2>Data</h2>
+      <div class="btn-row">
+        ${state.downloads ? '<button class="btn secondary small" data-action="export">Save a backup</button>' : ''}
+        <button class="btn secondary small" data-action="import">Restore a backup</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+      </div>
+      <div class="btn-row">
+        <button class="btn secondary small" data-action="clear-completed">Clear completed</button>
+        <button class="btn danger-text small" data-action="delete-all">Delete all tasks</button>
+      </div>
+      <p class="row-note">Clearing and deleting always ask for confirmation, and can be undone right after.</p>
+    </section>
+    <p class="about muted">Cadence ${APP_VERSION}. Speech recognition is provided by your browser and may send audio to its vendor for processing. Nothing else about your tasks leaves this page except what you choose to send to Claude or your calendar.</p>`;
+}
+
+// ---------------------------------------------------------------- theme and reminders while open
+
+function applyTheme() {
+  const t = state.settings.theme;
+  const root = document.documentElement;
+  if (t === 'system') delete root.dataset.theme;
+  else root.dataset.theme = t;
+}
+
+function checkReminders() {
+  const n = now();
+  let changed = false;
+  for (const task of openTasks()) {
+    if (!task.due || !task.time || task.notifiedAt) continue;
+    const [h, m] = task.time.split(':').map(Number);
+    const at = fromISODate(task.due);
+    at.setHours(h, m, 0, 0);
+    const diffMin = (at - n) / 60000;
+    if (diffMin <= state.settings.reminderLead && diffMin > -30) {
+      toast(`Reminder: ${task.title} · ${formatTime(task.time, state.settings.hour12)}`, { duration: 15000 });
+      say(`Reminder: ${task.title}`);
+      task.notifiedAt = n.toISOString();
+      changed = true;
+    }
+  }
+  if (changed) saveTasks(state.tasks);
+}
+
+async function exportBackup() {
+  const data = exportData(state.tasks, state.settings);
+  if (state.downloads) {
+    try {
+      await state.downloads.save({ filename: `cadence-backup-${todayISO()}.json`, data });
+      toast('Backup saved');
+    } catch (e) {
+      if (e && e.code !== 'cancelled') toast('Backup was not saved.');
+    }
+  }
+}
+
+// ---------------------------------------------------------------- events
+
+function bindEvents() {
+  document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+  el('micBtn').addEventListener('click', () => (state.listening ? stopListening() : startListening()));
+  el('captureMic').addEventListener('click', () => (state.listening ? stopListening() : startListening()));
+  el('captureClose').addEventListener('click', closeCapture);
+  el('backdrop').addEventListener('click', () => {
+    if (!el('profileSheet').hidden || !el('confirmSheet').hidden) return;
+    closeCapture(); closeTaskSheet();
+  });
+  el('typeBtn').addEventListener('click', () => openCapture({ focusInput: true }));
+  el('undoBtn').addEventListener('click', undo);
+
+  el('typeForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = el('typeInput').value;
+    el('typeInput').value = '';
+    el('transcript').textContent = v;
+    handleInput(v, 'text');
+  });
+
+  el('captureResult').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pending]');
+    if (!b || !state.pending) return;
+    if (b.dataset.pending === 'save') {
+      const created = addTasks(state.pending, 'voice');
+      state.pending = null;
+      showResult(created.map((t) => resultCard('Added', t)).join(''));
+      toast(created.length === 1 ? `Added "${created[0].title}"` : `Added ${created.length} tasks`, { action: 'Undo', onAction: undo });
+      say(created.length === 1 ? `Added ${created[0].title}` : `Added ${created.length} tasks`);
+    } else if (b.dataset.pending === 'edit') {
+      const first = state.pending[0];
+      state.pending = null;
+      el('captureResult').hidden = true;
+      openTaskSheet({ ...first, id: 'draft' });
+    } else {
+      state.pending = null;
+      el('captureResult').hidden = true;
+      el('transcript').textContent = 'Discarded.';
+    }
+  });
+
+  el('searchBtn').addEventListener('click', () => {
+    const bar = el('searchBar');
+    bar.hidden = !bar.hidden;
+    if (!bar.hidden) { setView('list'); el('searchInput').focus(); }
+    else { state.search = ''; el('searchInput').value = ''; render(); }
+  });
+  el('searchInput').addEventListener('input', (e) => { state.search = e.target.value.trim(); state.view = 'list'; render(); });
+  el('searchClear').addEventListener('click', () => { el('searchBar').hidden = true; if (!state.search) return; state.search = ''; el('searchInput').value = ''; render(); });
+
+  el('view').addEventListener('click', async (e) => {
+    const chip = e.target.closest('[data-filter]');
+    if (chip) { state.listFilter = chip.dataset.filter; render(); return; }
+    const day = e.target.closest('.day[data-date]');
+    if (day) {
+      state.selectedDate = day.dataset.date;
+      const d = fromISODate(day.dataset.date);
+      state.calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+      render();
+      return;
+    }
+    const actionEl = e.target.closest('[data-action]');
+    if (!actionEl) return;
+    const action = actionEl.dataset.action;
+    const row = e.target.closest('.task[data-id]');
+    const task = row ? state.tasks.find((t) => t.id === row.dataset.id) : null;
+    switch (action) {
+      case 'toggle':
+        if (!task) return;
+        if (task.completedAt) { reopenTask(task); toast('Reopened', { action: 'Undo', onAction: undo }); }
+        else { completeTask(task); toast(`Completed "${task.title}"`, { action: 'Undo', onAction: undo }); }
+        break;
+      case 'edit': if (task) openTaskSheet(task); break;
+      case 'toggle-completed': state.completedOpen = !state.completedOpen; render(); break;
+      case 'clear-completed': await applyCommand({ type: 'clearCompleted' }); break;
+      case 'cal-prev': state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() - 1, 1); render(); break;
+      case 'cal-next': state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() + 1, 1); render(); break;
+      case 'cal-today': state.selectedDate = todayISO(); state.calMonth = new Date(now().getFullYear(), now().getMonth(), 1); render(); break;
+      case 'add-for-day': openTaskSheet({ title: '', due: state.selectedDate, time: null, priority: 'normal', repeat: null, durationMin: null, tags: [], notes: '', id: 'draft' }); break;
+      case 'export': exportBackup(); break;
+      case 'import': el('importFile').click(); break;
+      case 'delete-all': await applyCommand({ type: 'deleteAll' }); break;
+      case 'switch-profile': showProfileSheet(); break;
+      case 'set-pin': changePin(); break;
+      default: break;
+    }
+  });
+
+  el('view').addEventListener('change', (e) => {
+    const input = e.target.closest('[data-setting]');
+    if (input) {
+      const key = input.dataset.setting;
+      let value;
+      if (input.type === 'checkbox') value = input.checked;
+      else value = input.value;
+      if (key === 'weekStart' || key === 'reminderLead') value = Number(value);
+      updateSettings({ [key]: value });
+      if (key === 'calendarSync' && value) state.tasks.forEach((t) => syncCalendar(t, null));
+      return;
+    }
+    if (e.target.id === 'importFile' && e.target.files[0]) {
+      const file = e.target.files[0];
+      file.text().then((text) => {
+        try {
+          const data = importData(text);
+          const existing = new Set(state.tasks.map((t) => t.id));
+          const fresh = data.tasks.filter((t) => !existing.has(t.id));
+          commit(() => { state.tasks.push(...fresh); });
+          toast(`Restored ${fresh.length} tasks`, { action: 'Undo', onAction: undo });
+        } catch (err) {
+          toast(`Restore failed: ${err.message}`, { duration: 7000 });
+        }
+      });
+      e.target.value = '';
+    }
+  });
+
+  let touchX = null;
+  el('view').addEventListener('touchstart', (e) => { touchX = e.target.closest('#calGrid') ? e.touches[0].clientX : null; }, { passive: true });
+  el('view').addEventListener('touchend', (e) => {
+    if (touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    touchX = null;
+    if (Math.abs(dx) < 60) return;
+    state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() + (dx < 0 ? 1 : -1), 1);
+    render();
+  }, { passive: true });
+
+  el('taskForm').addEventListener('submit', (e) => { e.preventDefault(); saveTaskSheet(); });
+  el('taskClose').addEventListener('click', closeTaskSheet);
+  el('taskDelete').addEventListener('click', async () => {
+    const t = state.tasks.find((x) => x.id === state.editingId);
+    if (!t) { closeTaskSheet(); return; }
+    const ok = await confirmAction({ title: `Delete "${t.title}"?`, message: 'You can undo this right after.', okLabel: 'Delete' });
+    if (!ok) return;
+    deleteTask(t);
+    toast(`Deleted "${t.title}"`, { action: 'Undo', onAction: undo });
+    closeTaskSheet();
+  });
+  el('taskComplete').addEventListener('click', () => {
+    const t = state.tasks.find((x) => x.id === state.editingId);
+    if (t) { completeTask(t); toast(`Completed "${t.title}"`, { action: 'Undo', onAction: undo }); }
+    closeTaskSheet();
+  });
+  el('taskSheet').addEventListener('click', (e) => {
+    const q = e.target.closest('[data-quick]');
+    if (!q) return;
+    const map = { today: todayISO(), tomorrow: toISODate(addDays(now(), 1)), nextweek: toISODate(addDays(now(), 7)), none: '' };
+    el('tDate').value = map[q.dataset.quick];
+    if (q.dataset.quick === 'none') el('tTime').value = '';
+  });
+
+  el('profileForm').addEventListener('submit', (e) => { e.preventDefault(); submitProfile(); });
+  el('profileBack').addEventListener('click', showProfileSheet);
+  el('profileList').addEventListener('click', async (e) => {
+    const item = e.target.closest('[data-slug]');
+    if (!item) return;
+    const slug = item.dataset.slug;
+    try {
+      const snap = await state.db.doc(`profiles/${slug}`).get();
+      const data = snap.exists ? snap.data() : {};
+      if (data.pinHash) askPin({ slug, name: data.name || slug, pinHash: data.pinHash });
+      else await openProfile({ slug, name: data.name || slug });
+    } catch {
+      el('profileError').textContent = 'Could not open that list. Try again.';
+      el('profileError').hidden = false;
+    }
+  });
+
+  el('confirmCancel').addEventListener('click', () => closeConfirm(false));
+  el('confirmOk').addEventListener('click', () => closeConfirm(true));
+
+  document.addEventListener('keydown', (e) => {
+    const typing = /^(input|textarea|select)$/i.test(e.target.tagName);
+    if (e.key === 'Escape') { if (!el('confirmSheet').hidden) closeConfirm(false); closeCapture(); closeTaskSheet(); el('searchBar').hidden = true; return; }
+    if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === ' ') { e.preventDefault(); if (state.listening) stopListening(); else startListening(); }
+    else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openCapture({ focusInput: true }); }
+    else if (e.key === '/') { e.preventDefault(); el('searchBar').hidden = false; setView('list'); el('searchInput').focus(); }
+    else if (e.key === 'z' || e.key === 'Z') undo();
+    else if (['1', '2', '3', '4'].includes(e.key)) setView(['list', 'calendar', 'insights', 'settings'][Number(e.key) - 1]);
+  });
+
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); checkReminders(); } });
+}
+
+async function changePin() {
+  if (!state.db || !state.profile) return;
+  // Reuse the profile sheet in PIN-setting mode.
+  profileMode = { step: 'setpin', pending: null };
+  el('profileTitle').textContent = `PIN for ${state.profile.name}`;
+  el('profileHint').textContent = 'Enter a new 4 to 8 digit PIN, or leave it empty to remove the PIN.';
+  el('pName').parentElement.hidden = true;
+  el('pPin').value = '';
+  el('pPin').required = false;
+  el('pPinLabel').textContent = 'New PIN';
+  el('profileBack').hidden = false;
+  el('profileError').hidden = true;
+  el('profileList').innerHTML = '';
+  el('profileSheet').hidden = false;
+  el('backdrop').hidden = false;
+  const handler = async (e) => {
+    e.preventDefault();
+    if (profileMode.step !== 'setpin') return;
+    const pin = el('pPin').value.trim();
+    if (pin && !/^\d{4,8}$/.test(pin)) { el('profileError').textContent = 'A PIN is 4 to 8 digits.'; el('profileError').hidden = false; return; }
+    try {
+      await state.db.doc(`profiles/${state.profile.slug}`).update({ pinHash: pin ? await sha256(pin) : null });
+      toast(pin ? 'PIN set' : 'PIN removed');
+    } catch { toast('Could not change the PIN.'); }
+    el('profileForm').removeEventListener('submit', handler, true);
+    el('profileSheet').hidden = true;
+    if (!anySheetOpen()) el('backdrop').hidden = true;
+  };
+  el('profileForm').addEventListener('submit', handler, true);
+  el('profileBack').onclick = () => {
+    el('profileForm').removeEventListener('submit', handler, true);
+    el('profileSheet').hidden = true;
+    if (!anySheetOpen()) el('backdrop').hidden = true;
+    el('profileBack').onclick = null;
+  };
+}
+
+// ---------------------------------------------------------------- capabilities boot
+
+async function bootCapabilities() {
+  const has = typeof window !== 'undefined' && window.claude && typeof window.claude.use === 'function';
+  if (!has) { state.capsResolved = true; render(); return; }
+  const use = (name) => window.claude.use(name).catch(() => null);
+  const [db, sample, mcp, downloads] = await Promise.all([use('db'), use('sample'), use('mcp'), use('downloads')]);
+  state.db = db;
+  state.sample = sample;
+  state.mcp = mcp;
+  state.downloads = downloads;
+  state.capsResolved = true;
+  if (mcp) probeCalendar();
+  if (db) {
+    const saved = savedProfile();
+    if (saved && saved.slug) await openProfile(saved);
+    else showProfileSheet();
+  }
+  render();
+}
+
+// ---------------------------------------------------------------- init
+
+function init() {
+  applyTheme();
+  bindEvents();
+  render();
+  renderMicState('Ready');
+  checkReminders();
+  setInterval(checkReminders, 30000);
+  setInterval(() => { if (state.view !== 'settings') render(); }, 5 * 60000);
+  bootCapabilities();
+}
+
+init();
+window.cadence = { state, parseInput, parseTask, handleInput };
+
+})();
+</script>

@@ -12,7 +12,7 @@ export const DEFAULT_SETTINGS = {
   continuous: false,          // keep listening after each task
   language: 'en-US',
   notifications: false,
-  reminderLead: 10,           // minutes before a timed task
+  reminderLead: 0,            // minutes before a timed task (0 = at the time)
   hour12: true,
   weekStart: 1,               // 0 = Sunday, 1 = Monday
   showCompleted: true,
@@ -75,6 +75,7 @@ export function sanitizeTask(t) {
     notifiedAt: t.notifiedAt || null,
     source: t.source || 'text',
     order: typeof t.order === 'number' ? t.order : Date.now(),
+    remind: t.remind !== false,
   };
 }
 
