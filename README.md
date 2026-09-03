@@ -15,6 +15,8 @@ The server uses **Claude Haiku 4.5**, the least expensive model. One spoken comm
 
 Without the server the app still works: it falls back to built-in understanding and shows reminders while it is open.
 
+The server's storage (Cloudflare KV) is free up to about 1,000 writes and 1,000 list calls a day, with reads effectively unlimited. The worker is built to stay far below that: the once-a-minute scheduler reads one small index (one read per minute) and only opens phones that have a reminder due, the app sends its schedule only when it changed, and the per-phone Claude counter is written every 25th command. A phone that slips out of the index is picked up by an hourly rebuild. A handful of phones use a few dozen writes a day.
+
 ## Set up once (about ten minutes)
 
 You need three secrets in the GitHub repository. Go to **Settings, Secrets and variables, Actions, New repository secret** and add:

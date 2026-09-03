@@ -29,13 +29,38 @@ function cors(env, extra = {}) {
 
 const json = (env, body, status = 200) => new Response(JSON.stringify(body), { status, headers: cors(env, { 'Content-Type': 'application/json' }) });
 
+// KV on the free plan allows about 1,000 writes and 1,000 list calls a day, so the
+// worker is careful: keys are cached in memory, the scheduler reads one small index
+// instead of listing every device, and counters are persisted only now and then.
+let vapidCache = null;
 async function vapid(env) {
+  if (vapidCache) return vapidCache;
   let keys = await env.KV.get('vapid', 'json');
   if (!keys) {
     keys = await generateVapidKeys();
     await env.KV.put('vapid', JSON.stringify(keys));
   }
+  vapidCache = keys;
   return keys;
+}
+
+// Daily Claude budget per phone. Counted in memory and written to KV every 25th
+// call (and at the cap), so a busy phone costs a handful of writes a day, not one
+// per command. The count survives a restart to within 25 commands.
+const budget = new Map();
+async function takeParseSlot(env, token, limit) {
+  const day = new Date().toISOString().slice(0, 10);
+  const key = `rl:${token}:${day}`;
+  let used = budget.get(key);
+  if (used === undefined) {
+    used = Number(await env.KV.get(key)) || 0;
+    for (const k of budget.keys()) if (!k.endsWith(day)) budget.delete(k);
+  }
+  if (used >= limit) return false;
+  used += 1;
+  budget.set(key, used);
+  if (used % 25 === 0 || used >= limit) await env.KV.put(key, String(used), { expirationTtl: 2 * 86400 });
+  return true;
 }
 
 async function readJson(request) {
@@ -50,12 +75,8 @@ async function handleParse(request, env) {
   if (!env.ANTHROPIC_API_KEY) return json(env, { error: 'server has no ANTHROPIC_API_KEY' }, 503);
 
   // Daily cap per device keeps the bill predictable.
-  const day = new Date().toISOString().slice(0, 10);
-  const rlKey = `rl:${token}:${day}`;
-  const used = Number(await env.KV.get(rlKey)) || 0;
   const limit = Number(env.PARSE_DAILY_LIMIT) || 400;
-  if (used >= limit) return json(env, { error: 'daily limit reached' }, 429);
-  await env.KV.put(rlKey, String(used + 1), { expirationTtl: 2 * 86400 });
+  if (!(await takeParseSlot(env, token, limit))) return json(env, { error: 'daily limit reached' }, 429);
 
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 20000 });
   const tasks = Array.isArray(body.tasks) ? body.tasks.slice(0, 120).map((t) => ({ id: String(t.id || ''), title: String(t.title || '').slice(0, 120), due: t.due || null, time: t.time || null })) : [];
@@ -74,6 +95,61 @@ async function handleParse(request, env) {
 }
 
 function deviceKey(token) { return `dev:${token}`; }
+
+// The index is one small KV value: for every phone, when its next unsent reminder
+// is due. The scheduler reads it once a minute and only opens the phones that have
+// something due, instead of listing and reading every phone every minute.
+const INDEX_KEY = 'idx';
+const REBUILD_MS = 60 * 60000;
+const LATE_LIMIT_MS = 30 * 60000; // never fire reminders more than 30 min late
+
+function nextUnsent(dev, nowMs = Date.now()) {
+  if (!dev || !dev.subscription || !Array.isArray(dev.reminders)) return null;
+  let best = null;
+  for (const r of dev.reminders) {
+    const t = Date.parse(r.at);
+    if (Number.isNaN(t) || t <= nowMs - LATE_LIMIT_MS) continue;
+    if (dev.sent && dev.sent[`${r.id}@${r.at}`]) continue;
+    if (best === null || t < best) best = t;
+  }
+  return best === null ? null : new Date(best).toISOString();
+}
+
+async function readIndex(env) {
+  const idx = await env.KV.get(INDEX_KEY, 'json');
+  return idx && typeof idx === 'object' && idx.devices ? idx : { rebuilt: null, devices: {} };
+}
+
+// One write, and only when this phone's entry actually changed.
+async function updateIndex(env, key, dev) {
+  const idx = await readIndex(env);
+  const next = dev ? nextUnsent(dev) : undefined;
+  const had = Object.prototype.hasOwnProperty.call(idx.devices, key);
+  if (next === undefined ? !had : had && idx.devices[key] === next) return idx;
+  if (next === undefined) delete idx.devices[key];
+  else idx.devices[key] = next;
+  await env.KV.put(INDEX_KEY, JSON.stringify(idx));
+  return idx;
+}
+
+// Once an hour the index is rebuilt from a full listing, so a phone that slipped
+// out of it (two syncs racing, a failed write) is back within the hour.
+async function rebuildIndex(env, nowMs) {
+  const devices = {};
+  let cursor;
+  do {
+    const page = await env.KV.list({ prefix: 'dev:', cursor });
+    cursor = page.list_complete ? undefined : page.cursor;
+    for (const { name } of page.keys) {
+      const dev = await env.KV.get(name, 'json');
+      const next = nextUnsent(dev, nowMs);
+      if (next) devices[name] = next;
+    }
+  } while (cursor);
+  const idx = { rebuilt: new Date(nowMs).toISOString(), devices };
+  await env.KV.put(INDEX_KEY, JSON.stringify(idx));
+  return idx;
+}
 
 function deviceStatus(dev) {
   const now = Date.now();
@@ -96,6 +172,7 @@ async function handleDevice(request, env, token, sub, ctx) {
   const key = deviceKey(token);
   if (request.method === 'DELETE') {
     await env.KV.delete(key);
+    await updateIndex(env, key, null);
     return json(env, { ok: true });
   }
   const existing = (await env.KV.get(key, 'json')) || { reminders: [], sent: {} };
@@ -112,6 +189,17 @@ async function handleDevice(request, env, token, sub, ctx) {
   const body = await readJson(request);
   if (!body) return json(env, { error: 'json body required' }, 400);
 
+  const s = body.subscription;
+  if (s !== undefined || sub !== 'reminders') {
+    if (!s || typeof s.endpoint !== 'string' || !s.keys || typeof s.keys.p256dh !== 'string' || typeof s.keys.auth !== 'string') {
+      return json(env, { error: 'subscription required' }, 400);
+    }
+    if (!/^https:\/\//.test(s.endpoint)) return json(env, { error: 'bad endpoint' }, 400);
+    existing.subscription = { endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth } };
+    existing.tz = typeof body.tz === 'string' ? body.tz.slice(0, 64) : existing.tz;
+  }
+  // The app sends its subscription together with its reminders in one request, so
+  // opening the app costs one write, not two.
   if (sub === 'reminders') {
     const reminders = (Array.isArray(body.reminders) ? body.reminders : []).slice(0, 500).map((r) => ({
       id: String(r.id || '').slice(0, 64),
@@ -123,17 +211,10 @@ async function handleDevice(request, env, token, sub, ctx) {
     // Drop sent-markers for reminders that no longer exist or moved.
     const live = new Set(reminders.map((r) => `${r.id}@${r.at}`));
     existing.sent = Object.fromEntries(Object.entries(existing.sent || {}).filter(([k]) => live.has(k)));
-  } else {
-    const s = body.subscription;
-    if (!s || typeof s.endpoint !== 'string' || !s.keys || typeof s.keys.p256dh !== 'string' || typeof s.keys.auth !== 'string') {
-      return json(env, { error: 'subscription required' }, 400);
-    }
-    if (!/^https:\/\//.test(s.endpoint)) return json(env, { error: 'bad endpoint' }, 400);
-    existing.subscription = { endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth } };
-    existing.tz = typeof body.tz === 'string' ? body.tz.slice(0, 64) : existing.tz;
   }
   existing.updatedAt = new Date().toISOString();
   await env.KV.put(key, JSON.stringify(existing), { expirationTtl: 400 * 86400 });
+  await updateIndex(env, key, existing);
   // Anything due in the next two minutes is handled right now by this request, so a
   // "remind me in 30 seconds" never waits for the scheduler.
   if (sub === 'reminders' && existing.subscription && ctx && typeof ctx.waitUntil === 'function') {
@@ -153,36 +234,43 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // minute's run from sending the same reminder twice; the notification tag on the
 // phone collapses any duplicate that a stale read still lets through.
 async function deliverDue(env, now = new Date(), { lookAheadMs = 90000, wait = sleep, onlyKey = null } = {}) {
-  const keys = await vapid(env);
   const subject = env.VAPID_SUBJECT || 'mailto:owner@example.com';
   const start = now.getTime();
-  const windowStart = start - 30 * 60000; // never fire reminders more than 30 min late
+  const windowStart = start - LATE_LIMIT_MS;
   const horizon = start + lookAheadMs;
+
+  // Which phones to open: the one that just synced, or whatever the index says is
+  // due. Most minutes the index says nothing, and that costs a single read.
+  let names;
+  if (onlyKey) {
+    names = [onlyKey];
+  } else {
+    let idx = await readIndex(env);
+    if (!idx.rebuilt || start - Date.parse(idx.rebuilt) >= REBUILD_MS) idx = await rebuildIndex(env, start);
+    names = Object.entries(idx.devices).filter(([, at]) => Date.parse(at) <= horizon).map(([name]) => name);
+  }
+  if (!names.length) return 0;
+  const keys = await vapid(env);
 
   // Pass one: find everything due or coming up, and claim it.
   const pending = [];
   const touched = new Map();
-  let cursor;
-  do {
-    const page = onlyKey ? { keys: [{ name: onlyKey }], list_complete: true } : await env.KV.list({ prefix: 'dev:', cursor });
-    cursor = page.list_complete ? undefined : page.cursor;
-    for (const { name } of page.keys) {
-      const dev = await env.KV.get(name, 'json');
-      if (!dev || !dev.subscription || !Array.isArray(dev.reminders) || !dev.reminders.length) continue;
-      const due = dev.reminders.filter((r) => {
-        const t = Date.parse(r.at);
-        return t <= horizon && t > windowStart && !(dev.sent && dev.sent[`${r.id}@${r.at}`]);
-      });
-      if (!due.length) continue;
-      dev.sent = dev.sent || {};
-      for (const r of due) {
-        dev.sent[`${r.id}@${r.at}`] = new Date().toISOString();
-        pending.push({ name, dev, reminder: r, at: Date.parse(r.at) });
-      }
-      touched.set(name, dev);
-      await env.KV.put(name, JSON.stringify(dev), { expirationTtl: 400 * 86400 });
+  for (const name of names) {
+    const dev = await env.KV.get(name, 'json');
+    if (!dev || !dev.subscription || !Array.isArray(dev.reminders) || !dev.reminders.length) continue;
+    const due = dev.reminders.filter((r) => {
+      const t = Date.parse(r.at);
+      return t <= horizon && t > windowStart && !(dev.sent && dev.sent[`${r.id}@${r.at}`]);
+    });
+    if (!due.length) continue;
+    dev.sent = dev.sent || {};
+    for (const r of due) {
+      dev.sent[`${r.id}@${r.at}`] = new Date().toISOString();
+      pending.push({ name, dev, reminder: r, at: Date.parse(r.at) });
     }
-  } while (cursor);
+    touched.set(name, dev);
+    await env.KV.put(name, JSON.stringify(dev), { expirationTtl: 400 * 86400 });
+  }
   if (!pending.length) return 0;
 
   // Pass two: push each one at its own moment, earliest first.
@@ -200,9 +288,11 @@ async function deliverDue(env, now = new Date(), { lookAheadMs = 90000, wait = s
     if (res.ok) sentCount += 1;
   }
 
-  // Record what happened. The claim above already persisted; this saves the outcome.
+  // Record what happened. The claim above already persisted; this saves the outcome
+  // and moves each phone's index entry on to its next reminder.
   for (const [name, dev] of touched) {
     await env.KV.put(name, JSON.stringify(dev), { expirationTtl: 400 * 86400 });
+    await updateIndex(env, name, dev);
   }
   return sentCount;
 }
@@ -216,7 +306,7 @@ export default {
     const path = url.pathname.replace(/\/+$/, '');
     try {
       if (path === '/api/health' && request.method === 'GET') {
-        return json(env, { ok: true, claude: Boolean(env.ANTHROPIC_API_KEY), version: '1.0.0' });
+        return json(env, { ok: true, claude: Boolean(env.ANTHROPIC_API_KEY), version: '1.1.0' });
       }
       if (path === '/api/vapid' && request.method === 'GET') {
         const keys = await vapid(env);
