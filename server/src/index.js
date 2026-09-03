@@ -6,7 +6,7 @@
 //   PUT  /api/devices/:token             store this phone's push subscription
 //   PUT  /api/devices/:token/reminders   replace this phone's reminder schedule
 //   DELETE /api/devices/:token           forget this phone
-//   cron every minute                    send the reminders that are due
+//   cron every minute                    send the reminders that are due, to the second
 //
 // Storage is a KV namespace. Devices are identified by a random token the app
 // generates; nothing personal is stored beyond task titles for reminders.
@@ -137,12 +137,27 @@ async function handleDevice(request, env, token, sub) {
   return json(env, { ok: true, reminders: (existing.reminders || []).length, subscribed: Boolean(existing.subscription) });
 }
 
-async function deliverDue(env, now = new Date()) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Sends the reminders that are due. The cron fires once a minute and can itself
+// run late, so each run also CLAIMS reminders coming up in the next 90 seconds
+// and then waits until their exact second before pushing. That turns "some time
+// in the next minute or two" into "on the second".
+//
+// Claiming (writing the sent marker before the wait) is what keeps the next
+// minute's run from sending the same reminder twice; the notification tag on the
+// phone collapses any duplicate that a stale read still lets through.
+async function deliverDue(env, now = new Date(), { lookAheadMs = 90000, wait = sleep } = {}) {
   const keys = await vapid(env);
   const subject = env.VAPID_SUBJECT || 'mailto:owner@example.com';
-  const windowStart = now.getTime() - 30 * 60000; // never fire reminders more than 30 min late
+  const start = now.getTime();
+  const windowStart = start - 30 * 60000; // never fire reminders more than 30 min late
+  const horizon = start + lookAheadMs;
+
+  // Pass one: find everything due or coming up, and claim it.
+  const pending = [];
+  const touched = new Map();
   let cursor;
-  let sentCount = 0;
   do {
     const page = await env.KV.list({ prefix: 'dev:', cursor });
     cursor = page.list_complete ? undefined : page.cursor;
@@ -151,24 +166,43 @@ async function deliverDue(env, now = new Date()) {
       if (!dev || !dev.subscription || !Array.isArray(dev.reminders) || !dev.reminders.length) continue;
       const due = dev.reminders.filter((r) => {
         const t = Date.parse(r.at);
-        return t <= now.getTime() && t > windowStart && !(dev.sent && dev.sent[`${r.id}@${r.at}`]);
+        return t <= horizon && t > windowStart && !(dev.sent && dev.sent[`${r.id}@${r.at}`]);
       });
       if (!due.length) continue;
-      let changed = false;
+      dev.sent = dev.sent || {};
       for (const r of due) {
-        const res = await sendPush(dev.subscription, { title: r.title, body: r.body, id: r.id }, { subject, keys });
-        dev.sent = dev.sent || {};
-        dev.sent[`${r.id}@${r.at}`] = now.toISOString();
-        dev.lastDelivery = { at: now.toISOString(), title: r.title, status: res.status, ok: res.ok };
-        changed = true;
-        if (res.gone) { delete dev.subscription; break; }
-        if (res.ok) sentCount += 1;
+        dev.sent[`${r.id}@${r.at}`] = new Date().toISOString();
+        pending.push({ name, dev, reminder: r, at: Date.parse(r.at) });
       }
-      if (changed) await env.KV.put(name, JSON.stringify(dev), { expirationTtl: 400 * 86400 });
+      touched.set(name, dev);
+      await env.KV.put(name, JSON.stringify(dev), { expirationTtl: 400 * 86400 });
     }
   } while (cursor);
+  if (!pending.length) return 0;
+
+  // Pass two: push each one at its own moment, earliest first.
+  pending.sort((a, b) => a.at - b.at);
+  let sentCount = 0;
+  for (const item of pending) {
+    const delay = item.at - Date.now();
+    if (delay > 0) await wait(delay);
+    const dev = item.dev;
+    if (!dev.subscription) continue;
+    const r = item.reminder;
+    const res = await sendPush(dev.subscription, { title: r.title, body: r.body, id: r.id }, { subject, keys });
+    dev.lastDelivery = { at: new Date().toISOString(), title: r.title, status: res.status, ok: res.ok };
+    if (res.gone) delete dev.subscription;
+    if (res.ok) sentCount += 1;
+  }
+
+  // Record what happened. The claim above already persisted; this saves the outcome.
+  for (const [name, dev] of touched) {
+    await env.KV.put(name, JSON.stringify(dev), { expirationTtl: 400 * 86400 });
+  }
   return sentCount;
 }
+
+export { deliverDue };
 
 export default {
   async fetch(request, env) {
@@ -196,6 +230,8 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(deliverDue(env, new Date(event.scheduledTime)));
+    // Use the real clock, not event.scheduledTime: when the scheduler itself runs
+    // late, the look-ahead should still start from now.
+    ctx.waitUntil(deliverDue(env));
   },
 };

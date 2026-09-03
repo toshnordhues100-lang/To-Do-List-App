@@ -63,6 +63,7 @@ Reminders on iPhone only work from the home-screen version (an Apple rule), whic
 - A task with a time rings at that time (or a few minutes before, your choice).
 - A task with only a date rings at your daily reminder time, 9:00 AM by default.
 - Reminders arrive with the app closed and the phone locked. A phone that is powered off receives them when it turns back on.
+- Delivery is to the second. The server checks once a minute but claims reminders up to 90 seconds ahead and waits for their exact moment, so a late scheduler run cannot make a reminder late.
 - Any task can also be added to your calendar app with the "Add to calendar" button when editing it.
 
 ## Everything else
